@@ -1,7 +1,7 @@
 # algorithm_case.py
 
 from typing import Type, Dict, Any
-from node import Node
+from Node import Node
 
 class AlgorithmCase:
     def __init__(self, name: str, node_class: Type[Node], default_params: Dict[str, Any]):

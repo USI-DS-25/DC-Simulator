@@ -1,4 +1,1 @@
-from Node import Node
-
-class PrimaryBackupNode(Node):
-    pass
+# Protocol implementations removed - use simple_test.py instead
