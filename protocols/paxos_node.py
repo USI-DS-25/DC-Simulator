@@ -16,7 +16,7 @@ class PaxosNode(Node):
 
         # Persistent state (if node acts as acceptor)
         self.store.setdefault('promised_id', None) # highest proposal id promised
-        self.store.setdefault('accepted_prop', None) # (proposal_id, value) of highest accepted proposal
+        self.store.setdefault('accepted_prop', None) # (proposal_id, value) of highest accepted proposal, if any
 
         # Proposal state (if node acts as proposer)
         self.ballot = node_id # starts as node_id to ensure uniqueness
@@ -60,10 +60,10 @@ class PaxosNode(Node):
             # TODO: add server id for leader change?
 
     class PromiseMsg:
-        def __init__(self, accepted_prop):
+        def __init__(self, acceptor_id, accepted_prop):
             self.type = "PROMISE"
             self.accepted_prop = accepted_prop # previously accepted proposal (if any)
-            self.id = self.node_id
+            self.id = acceptor_id
 
     class AcceptMsg:
         # TODO: add slot number?
@@ -84,10 +84,28 @@ class PaxosNode(Node):
         self.state = "PROCESSING"
         
         msg_type = getattr(msg, 'type', None)
+
+        # TODO: this if-else chain is ugly as heck, refactor later
         if msg_type == "PREPARE":
             # TODO: Handle prepare message
             print(f"Node {self.id} handling PREPARE message from {src}")
-            pass
+            # check if node has already promised a higher ballot
+            if self.store['promised_id'] is None or msg.ballot > self.store['promised_id']:
+                # promise the ballot
+                self.store['promised_id'] = msg.ballot
+                # send promise back, including previously accepted proposal (if any)
+                if self.store['accepted_prop'] is not None:
+                    accepted_prop = self.store['accepted_prop']
+                else:
+                    accepted_prop = None
+                promise_msg = PaxosNode.PromiseMsg(self.id, accepted_prop)
+                print("here")
+                self.net.send(self.id, src, promise_msg)
+            else:
+                # ignore the prepare message
+                # TODO: can remove this else block, i'll leave it rn for clarity
+                pass
+
         elif msg_type == "PROMISE":
             # TODO: Handle promise message
             print(f"Node {self.id} handling PROMISE message from {src}")
@@ -116,6 +134,7 @@ class PaxosNode(Node):
             proposal = self.create_proposal(msg)
             # Send prepare messages to all acceptors
             prepare_msg = PaxosNode.PrepareMsg(proposal.ballot)
+            # TODO: right now it sends to all, optimization: send to a (randomly selected?) quorum only
             for node in self.all_nodes:
                 if node != self.id:
                     self.net.send(self.id, node, prepare_msg)

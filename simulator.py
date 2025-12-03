@@ -59,7 +59,6 @@ class Simulator:
             return
 
         if ev.kind == "MESSAGE":
-            print("here")
             src = ev.data.get("src")
             msg = ev.data.get("msg")
             node.on_message(src, msg)
