@@ -179,7 +179,8 @@ class BenchmarkRunner:
             # Create clients
             clients = [Client(i, sim, net, sim.logger) for i in range(num_requests)]
             for i, client in enumerate(clients):
-                sim.schedule(0.1 * (i % 10), "CLIENT_START", client.id, {})
+                # sim.schedule(0.1 * (i % 10), "CLIENT_START", client.id, {})
+                sim.schedule(0.1 * (i % 10), "MESSAGE", client.id, {"src": client.id, "msg": f"request_from_client_{i}"})
             
             # Run simulation
             start_time = time.time()
@@ -435,7 +436,8 @@ def main():
     
     # Create benchmark configuration
     config = BenchmarkConfig(
-        protocols=['simple_test', 'paxos'],
+        # protocols=['simple_test', 'paxos'],
+        protocols=['paxos'],
         num_nodes_list=[3, 5],
         network_delays=[1.0, 5.0],
         packet_losses=[0.0, 0.01],

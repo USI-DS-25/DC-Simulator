@@ -59,6 +59,7 @@ class Simulator:
             return
 
         if ev.kind == "MESSAGE":
+            print("here")
             src = ev.data.get("src")
             msg = ev.data.get("msg")
             node.on_message(src, msg)
@@ -73,6 +74,9 @@ class Simulator:
         elif ev.kind == "TIMER":
             timer_id = ev.data.get("timer_id")
             node.on_timer(timer_id)
+
+        else:
+            raise ValueError(f"Unknown event kind: {ev.kind}")
 
     def log(self, node_id: int, message: str) -> None:
         """Log a message with timestamp."""

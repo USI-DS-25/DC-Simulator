@@ -13,6 +13,7 @@ class SimpleTestNode(Node):
         self.all_nodes = all_nodes or []
         
     def on_message(self, src, msg):
+        print(f"Node {self.id} received message from {src}: {msg}")
         """Handle incoming message"""
         self.messages_received += 1
         self.state = "processing"

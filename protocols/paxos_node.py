@@ -21,9 +21,16 @@ class PaxosNode(Node):
         # Proposal state (if node acts as proposer)
         self.ballot = node_id # starts as node_id to ensure uniqueness
         self.proposals = [] 
+        self.acceptors_responded = {} # mapping from proposal id to set of acceptors that responded
 
         # distinguished roles
         self.is_leader = False
+        # if im the node with the lowest id, start as leader
+        # this is hacky, TODO: implement real leader election
+        if self.id == max(self.all_nodes):
+            self.is_leader = True
+        if self.is_leader:
+            print(f"Node {self.id} starting as leader")
 
     # proposal structure
     class Proposal:
@@ -71,30 +78,51 @@ class PaxosNode(Node):
             self.accepted_id = accepted_id
         
     def on_message(self, src, msg):
+        # TODO: src doesnt distinguish between nodes and clients
+        print(f"Node {self.id} received message from {src}: {msg}")
         self.messages_received += 1
         self.state = "PROCESSING"
         
         msg_type = getattr(msg, 'type', None)
         if msg_type == "PREPARE":
             # TODO: Handle prepare message
+            print(f"Node {self.id} handling PREPARE message from {src}")
             pass
         elif msg_type == "PROMISE":
             # TODO: Handle promise message
+            print(f"Node {self.id} handling PROMISE message from {src}")
             pass
         elif msg_type == "ACCEPT":
             # TODO: Handle accept message
+            print(f"Node {self.id} handling ACCEPT message from {src}")
             pass
         elif msg_type == "ACCEPTED":
             # TODO: Handle accepted message
+            print(f"Node {self.id} handling ACCEPTED message from {src}")
             pass
         else:
-            # Unknown message type
-            print(f"Node {self.id} received unknown message type from {src}: {msg_type}")
-            pass
+            # Client request, create proposal
+            print(f"Node {self.id} handling CLIENT REQUEST message from {src}")
+            # pass
 
-        # Echo back to sender
-        if src >= 0:
-            self.net.send(self.id, src, f"ack_{msg}")
+            # TODO: let distinguished leader handle client requests by fowarding them to it
+            if not self.is_leader:
+                print(f"Node {self.id} is not leader, forwarding request to leader")
+                # find leader (node with highest id)
+                leader_id = max(self.all_nodes)
+                self.net.send(self.id, leader_id, msg)
+                return
+
+            proposal = self.create_proposal(msg)
+            # Send prepare messages to all acceptors
+            prepare_msg = PaxosNode.PrepareMsg(proposal.ballot)
+            for node in self.all_nodes:
+                if node != self.id:
+                    self.net.send(self.id, node, prepare_msg)
+
+        # # Echo back to sender
+        # if src >= 0:
+        #     self.net.send(self.id, src, f"ack_{msg}")
         
         self.state = "IDLE"
 
