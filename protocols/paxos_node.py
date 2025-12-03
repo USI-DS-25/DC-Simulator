@@ -89,7 +89,12 @@ class PaxosNode(Node):
             pass
         else:
             # Unknown message type
+            print(f"Node {self.id} received unknown message type from {src}: {msg_type}")
             pass
+
+        # Echo back to sender
+        if src >= 0:
+            self.net.send(self.id, src, f"ack_{msg}")
         
         self.state = "IDLE"
 

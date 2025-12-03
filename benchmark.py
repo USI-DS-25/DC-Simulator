@@ -435,7 +435,7 @@ def main():
     
     # Create benchmark configuration
     config = BenchmarkConfig(
-        protocols=['simple_test'],
+        protocols=['simple_test', 'paxos'],
         num_nodes_list=[3, 5],
         network_delays=[1.0, 5.0],
         packet_losses=[0.0, 0.01],
