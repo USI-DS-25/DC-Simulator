@@ -2,7 +2,7 @@
 Paxos protocol implementation for DBSIM
 """
 
-from typing import List, Any
+from typing import List, Any, Iterable, Optional
 from Node import Node
 
 # Outstanding TODOs:
@@ -13,13 +13,22 @@ from Node import Node
 
 class PaxosNode(Node):
     
-    # TODO: modify arguments as needed
-    def __init__(self, node_id, sim, net, all_nodes=None, **kwargs):
-        super().__init__(node_id, sim, net, logger=kwargs.get('logger'))
-        self.all_nodes = all_nodes or []
+    def __init__(
+        self,
+        node_id: int,
+        sim,
+        net,
+        all_nodes: Optional[Iterable[int]] = None,
+        *,
+        logger=None,
+        quorum_size: Optional[int] = None,
+        **kwargs,
+    ):
+        super().__init__(node_id, sim, net, logger=logger)
+        self.all_nodes = list(all_nodes) if all_nodes is not None else []
 
         # TODO: Configuration (eg quorum size)
-        self.quorum_size = len(self.all_nodes) // 2 + 1
+        self.quorum_size = quorum_size or (len(self.all_nodes) // 2 + 1)
 
         # Persistent state (if node acts as acceptor)
         self.store.setdefault('promised_ballot', None) # highest ballot _promised_
@@ -27,10 +36,10 @@ class PaxosNode(Node):
 
         # Proposal state (if node acts as proposer)
         self.ballot = node_id # starts as node_id to ensure uniqueness
-        # TODO: check that stored commands will eventually be proposed, rn i dont think they will
         self.potential_commands: List[Any] = [] # client requests to be proposed
         self.promises: dict = {} # ballot_num -> list of promise msgs received
         self.learn_requests_received: dict = {} # proposal_id -> list of learn msgs received
+        self.proposal_in_progress = False
 
         # distinguished roles
         self.is_leader = False
@@ -117,6 +126,16 @@ class PaxosNode(Node):
     def should_learn_proposal(self, proposal):
         # TODO: implement the logic here
         return False  # Placeholder for learning condition
+
+    def propose_next_command(self):
+        """Kick off phase 1 for the next queued command if we're the leader."""
+        if not self.is_leader or self.proposal_in_progress or not self.potential_commands:
+            return
+        prepare_msg = PaxosNode.PrepareMsg(self.ballot) # use the current ballot number, will inc later
+        self.proposal_in_progress = True
+        for node in self.all_nodes:
+            if node != self.id:
+                self.net.send(self.id, node, prepare_msg)
         
     def on_message(self, src, msg):
         # TODO: src doesnt distinguish between nodes and clients
@@ -225,6 +244,8 @@ class PaxosNode(Node):
                 print(f"Node {self.id} learned and executing command: {msg.proposal.value}")
                 # Forget about the learned proposal
                 self.learn_requests_received.pop(proposal_id, None)
+                self.proposal_in_progress = False
+                self.propose_next_command()
             
 
         else:
@@ -243,12 +264,7 @@ class PaxosNode(Node):
             # add client request to potential commands
             self.potential_commands.append(msg)
 
-            # Send prepare messages to all acceptors
-            prepare_msg = PaxosNode.PrepareMsg(self.ballot) # use the current ballot number, will inc later
-            # TODO: right now it sends to all, optimization: send to a (randomly selected?) quorum only
-            for node in self.all_nodes:
-                if node != self.id:
-                    self.net.send(self.id, node, prepare_msg)
+            self.propose_next_command()
         
         self.state = "IDLE"
 

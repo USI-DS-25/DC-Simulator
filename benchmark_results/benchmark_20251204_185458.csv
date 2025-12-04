@@ -1,5 +1,0 @@
-protocol,num_nodes,network_delay,packet_loss,num_requests,duration,total_messages,throughput_mps,latency_min,latency_max,latency_avg,latency_median,latency_p95,latency_p99,commits,aborts,commit_rate,avg_cpu,avg_memory,timestamp
-simple_test,3,1.0,0.0,100,200.0,0,0.0,0,0,0,0,0,0,0,0,0.0,13,35.333333333333336,2025-12-04T18:54:56.878225
-simple_test,5,1.0,0.0,100,200.0,0,0.0,0,0,0,0,0,0,0,0,0.0,9.8,38.2,2025-12-04T18:54:57.138256
-paxos,3,1.0,0.0,100,200.0,0,0.0,0,0,0,0,0,0,0,0,0.0,15.333333333333334,40.333333333333336,2025-12-04T18:54:57.660161
-paxos,5,1.0,0.0,100,200.0,0,0.0,0,0,0,0,0,0,0,0,0.0,15.8,40.8,2025-12-04T18:54:58.325288
