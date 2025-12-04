@@ -30,6 +30,7 @@ class PaxosNode(Node):
         # TODO: check that stored commands will eventually be proposed, rn i dont think they will
         self.potential_commands: List[Any] = [] # client requests to be proposed
         self.promises: dict = {} # ballot_num -> list of promise msgs received
+        self.learn_requests_received: dict = {} # proposal_id -> list of learn msgs received
 
         # distinguished roles
         self.is_leader = False
@@ -114,6 +115,14 @@ class PaxosNode(Node):
             # ballot_num = self.ballot
 
         return value
+    
+    def should_accept_proposal(self, proposal):
+        # TODO: implement the logic here
+        return False  # Placeholder for acceptance condition
+    
+    def should_learn_proposal(self, proposal):
+        # TODO: implement the logic here
+        return False  # Placeholder for learning condition
         
     def on_message(self, src, msg):
         # TODO: src doesnt distinguish between nodes and clients
@@ -125,7 +134,7 @@ class PaxosNode(Node):
 
         # TODO: this if-else chain is ugly as heck, refactor later
         if msg_type == "PREPARE":
-            # print(f"Node {self.id} handling PREPARE message from {src}")
+            print(f"Node {self.id} handling PREPARE message from {src}")
             # check if node has already promised a higher ballot
             if self.store['promised_ballot'] is None or msg.ballot > self.store['promised_ballot']:
                 # promise the ballot
@@ -146,7 +155,7 @@ class PaxosNode(Node):
                 pass
 
         elif msg_type == "PROMISE":
-            # print(f"Node {self.id} handling PROMISE message from {src}")
+            print(f"Node {self.id} handling PROMISE message from {src}")
 
             # Record the promise
             if msg.ballot not in self.promises:
@@ -181,9 +190,25 @@ class PaxosNode(Node):
                 self.store['promised_ballot'] = msg.proposal.ballot
                 self.store['accepted_prop'] = (msg.proposal.ballot, msg.proposal.value)
 
-                # send accepted message back to proposer
-                accepted_msg = PaxosNode.AcceptedMsg(self.id)
-                self.net.send(self.id, src, accepted_msg)
+                # # send accepted message back to proposer
+                # accepted_msg = PaxosNode.AcceptedMsg(self.id)
+                # self.net.send(self.id, src, accepted_msg)
+
+
+                # send learn msg to all learners so they execute the command
+                learn_msg = PaxosNode.LearnMsg(msg.proposal)
+                for node in self.all_nodes:
+                    if node != self.id:
+                        self.net.send(self.id, node, learn_msg)
+
+                # since theoretically all processes play the roles of proposer, acceptor, and learner,
+                # the node should also learn the proposal itself by sending it. we can simulate this by
+                # incrementing the learn_requests_received count by one immediately
+                proposal_id = msg.proposal.ballot
+                if proposal_id not in self.learn_requests_received:
+                    self.learn_requests_received[proposal_id] = []
+                self.learn_requests_received[proposal_id].append(msg)
+                
             else:
                 # ignore the accept message
                 # can skip this block, leaving it for clarity
@@ -191,12 +216,46 @@ class PaxosNode(Node):
 
             pass
         elif msg_type == "ACCEPTED":
-            # TODO: Handle accepted message
+            # # TODO: Handle accepted message
             print(f"Node {self.id} handling ACCEPTED message from {src}")
+            print("This should NOT happen")
+
+            # # Record the acceptance of the proposal
+            # if msg.proposal.ballot not in self.promises:
+            #     self.promises[msg.proposal.ballot] = []
+            # self.promises[msg.proposal.ballot].append(src)
+
+            # # Check if a majority of acceptors have accepted the proposal
+            # if len(self.promises[msg.proposal.ballot]) >= self.quorum_size:
+            #     # Notify all learners about the accepted proposal
+            #     learn_msg = PaxosNode.LearnMsg(msg.proposal)
+            #     for node in self.all_nodes:
+            #         if node != self.id:
+            #             self.net.send(self.id, node, learn_msg)
+
+            #     # Forget about the proposal
+            #     self.promises.pop(msg.proposal.ballot, None)
             pass
+
         elif msg_type == "LEARN":
-            # TODO: implement
-            pass
+            print(f"Node {self.id} handling LEARN message from {src}")
+
+            proposal_id = msg.proposal.ballot
+            if proposal_id not in self.learn_requests_received:
+                self.learn_requests_received[proposal_id] = []
+            self.learn_requests_received[proposal_id].append(msg)
+
+            # Check if a majority of learn requests have been received for this proposal
+            # do +1 because the node itself counts as a learner TODO: check if this is correct
+            if len(self.learn_requests_received[proposal_id]) >= self.quorum_size:
+                # Execute the learned command
+                # TODO: implement a proper command execution mechanism
+                # TODO: this isnt firing :/
+                print(f"Node {self.id} learned and executing command: {msg.proposal.value}")
+                # Forget about the learned proposal
+                self.learn_requests_received.pop(proposal_id, None)
+            
+
         else:
             # Client request, prepare to propose it 
             print(f"Node {self.id} handling CLIENT REQUEST message from {src}")
@@ -219,27 +278,9 @@ class PaxosNode(Node):
             for node in self.all_nodes:
                 if node != self.id:
                     self.net.send(self.id, node, prepare_msg)
-
-        # # Echo back to sender
-        # if src >= 0:
-        #     self.net.send(self.id, src, f"ack_{msg}")
         
         self.state = "IDLE"
 
     # TODO
     def on_timer(self, timer_id):
         pass
-    
-    # def send_test_message(self, dest, msg):
-    #     """Send a test message"""
-    #     self.net.send(self.id, dest, msg)
-    #     self.messages_sent += 1
-    
-    # def get_state(self):
-    #     """Get current node state"""
-    #     return {
-    #         "id": self.id,
-    #         "state": self.state,
-    #         "messages_received": self.messages_received,
-    #         "messages_sent": self.messages_sent
-    #     }
