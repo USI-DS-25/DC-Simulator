@@ -1,0 +1,119 @@
+@startuml DBsim_DC_Simulator_UML_Architecture
+
+
+skinparam classAttributeIconSize 0
+
+abstract class Node {
+  - id
+  - sim
+  - net
+  - logger
+  + send()
+  + sync_send()
+  + set_timer()
+  + on_message() {abstract}
+  + on_timer() {abstract}
+}
+
+class Simulator {
+  - time
+  - event_queue
+  - nodes
+  - logger
+  + run()
+  + register_node()
+  + schedule_event()
+}
+
+class Event {
+  - time
+  - event_type
+  - target
+  - kwargs
+  + __lt__()
+  + __repr__()
+}
+
+class Network {
+  - sim
+  - cfg
+  - logger
+  + send()
+  + sync_send()
+}
+
+class Logger {
+  - start_time
+  - filename
+  + log()
+  + event()
+  + message()
+  + client_latency()
+}
+
+class ClientNode
+class PrimaryBackupNode
+class PaxosNode
+class RaftNode
+class LOWINode
+
+Node <|-- ClientNode
+Node <|-- PrimaryBackupNode
+Node <|-- PaxosNode
+Node <|-- RaftNode
+Node <|-- LOWINode
+
+Simulator *-- Event : creates
+Simulator *-- Node : owns
+Simulator o-- Logger : shared
+
+Node *-- Network : composed
+Node o-- Logger : shared
+
+Network o-- Logger : shared
+
+class Config {
+  + num_nodes
+  + algorithm
+  + delay_range
+  + sync_violation_prob
+}
+
+class AlgorithmCase {
+  - name
+  - node_class
+  - default_params
+  + create_node()
+}
+
+class algorithms.py {
+  - ALGORITHM_REGISTRY
+}
+
+AlgorithmCase --> Node : instantiates
+algorithms.py --> AlgorithmCase
+
+class "main.py" as Main {
+  + main()
+}
+
+Main --> Simulator
+Main --> Network
+Main --> Logger
+Main --> algorithms.py
+Main --> Config
+Main --> ClientNode
+
+' Legend
+package "Legend" {
+  class A
+  class B
+  class C
+  class D
+  A <|-- B : is-a (inheritance)
+  C *-- D : has-a (composition)
+  C o-- D : has-a (aggregation)
+  C --> D : uses (association)
+}
+
+@enduml
