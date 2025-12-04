@@ -24,11 +24,3 @@ class Logger:
         
         # Print to console
         print(f"[{node_id}] {level}: {message}")
-
-    def event():
-        pass
-
-    def message():
-        pass
-    def client_latency():
-        pass

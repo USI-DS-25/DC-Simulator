@@ -3,15 +3,17 @@
 Base node class for distributed algorithms with metrics and synchronization support.
 """
 
-from typing import Any, Optional, Dict, List
-from simulator import Simulator
+from typing import Any, Optional, Dict, List, TYPE_CHECKING
 from Network import Network
 from abc import ABC, abstractmethod
 import random
 
+if TYPE_CHECKING:
+    from simulator import Simulator
+
 
 class Node(ABC):
-    def __init__(self, node_id: int, sim: Simulator, net: Network, logger=None):
+    def __init__(self, node_id: int, sim: "Simulator", net: Network, logger=None):
         self.id = node_id
         self.sim = sim
         self.net = net
@@ -41,13 +43,13 @@ class Node(ABC):
         self.pending_sync_sends: Dict[str, tuple] = {}  # msg_id -> (timestamp, callback)
 
     @abstractmethod
-    def on_message(self, src: int, msg: Any):
+    def on_message(self, src: Any, msg: Any):
         """Called when a message is delivered to this node."""
         print(f"Node {self.id} received message from {src}: {msg}")
         pass
 
     @abstractmethod
-    def on_timer(self, timer_id: str):
+    def on_timer(self, timer_id: Any):
         """Called when a timer fires for this node."""
         pass
 
@@ -62,8 +64,10 @@ class Node(ABC):
         self.messages_sent += 1
         return True
 
-    
-    
+    def set_timer(self, delay: float, timer_id: Any) -> None:
+        """Set a timer that will fire after delay time units."""
+        fire_time = self.sim.time + delay
+        self.sim.schedule(fire_time, "TIMER", self.id, {"timer_id": timer_id})
     
     def update_metrics(self) -> None:
         """Update node resource usage metrics."""

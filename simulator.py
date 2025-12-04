@@ -5,7 +5,11 @@ Core simulation engine that manages time, events, and node interactions.
 
 import heapq
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from Node import Node
+
+if TYPE_CHECKING:
+    from config import Config
 
 @dataclass(order=True)
 class Event:
@@ -28,7 +32,8 @@ class Simulator:
         # Metrics and logger
         from logger import Logger
         self.logger = Logger()
-        self.config = None
+        self.config: Optional["Config"] = None
+        self.metrics: Optional[Any] = None
 
     def register_node(self, node_id: int, node: "Node") -> None:
         self.nodes[node_id] = node
