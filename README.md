@@ -32,7 +32,7 @@ python3 benchmark.py
 
 ### Protocol Implementations
 
-**📝 Note:** Consensus protocol implementations (Primary-Backup, Paxos, Raft, LOWI) need to be completed to `protocols/` directory.
+**📝 Note:** Consensus protocol implementations (Primary-Backup, Paxos, Raft, LOWI) need to be completed in the `protocols/` directory.
 
 Template protocol available in `protocols/simple_test.py` for implementing custom consensus algorithms.
 
@@ -62,7 +62,7 @@ python3 benchmark.py
 ```
 
 **Configuration:**
-- Protocols: All 4 (Primary-Backup, Paxos, Raft, LOWI)
+- Protocols: All 4 to be implemented(Primary-Backup, Paxos, Raft, LOWI), simple test available
 - Node counts: 3, 5
 - Network delays: 1ms, 5ms
 - Packet loss: 0%, 1%

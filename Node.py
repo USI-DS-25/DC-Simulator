@@ -61,24 +61,9 @@ class Node(ABC):
         self.messages_sent += 1
         return True
 
-    def set_timer(self, delay: float, timer_id: str) -> None:
-        """Schedule a timer that will fire after delay."""
-        event_time = self.sim.time + delay
-        self.sim.schedule(event_time, "TIMER", self.id, {"timer_id": timer_id})
-
-    def cancel_timer(self, timer_id: str) -> None:
-        """Cancel a scheduled timer."""
-        if timer_id in self.timers:
-            del self.timers[timer_id]
-
-    def receive_message(self, message: Any) -> None:
-        """Receive a message in the inbox."""
-        self.inbox.append(message)
-        self.messages_received += 1
-        self.state = "PROCESSING"
-        if self.sim:
-            self.sim.schedule(self.sim.time + 0.1, "TIMER", self.id, {"timer_id": "_finish_processing"})
-
+    
+    
+    
     def update_metrics(self) -> None:
         """Update node resource usage metrics."""
         if self.is_shutdown:
