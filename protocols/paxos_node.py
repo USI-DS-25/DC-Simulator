@@ -82,12 +82,6 @@ class PaxosNode(Node):
             self.type = "ACCEPT"
             self.proposal = proposal
 
-    class AcceptedMsg: # phase 2b
-        def __init__(self, accepted_id):
-            self.type = "ACCEPTED"
-            # TODO: should it send the whole proposal back?
-            self.accepted_id = accepted_id
-
     class LearnMsg:
         def __init__(self, proposal):
             self.type = "LEARN"
@@ -213,29 +207,6 @@ class PaxosNode(Node):
                 # ignore the accept message
                 # can skip this block, leaving it for clarity
                 pass
-
-            pass
-        elif msg_type == "ACCEPTED":
-            # # TODO: Handle accepted message
-            print(f"Node {self.id} handling ACCEPTED message from {src}")
-            print("This should NOT happen")
-
-            # # Record the acceptance of the proposal
-            # if msg.proposal.ballot not in self.promises:
-            #     self.promises[msg.proposal.ballot] = []
-            # self.promises[msg.proposal.ballot].append(src)
-
-            # # Check if a majority of acceptors have accepted the proposal
-            # if len(self.promises[msg.proposal.ballot]) >= self.quorum_size:
-            #     # Notify all learners about the accepted proposal
-            #     learn_msg = PaxosNode.LearnMsg(msg.proposal)
-            #     for node in self.all_nodes:
-            #         if node != self.id:
-            #             self.net.send(self.id, node, learn_msg)
-
-            #     # Forget about the proposal
-            #     self.promises.pop(msg.proposal.ballot, None)
-            pass
 
         elif msg_type == "LEARN":
             print(f"Node {self.id} handling LEARN message from {src}")
