@@ -5,6 +5,12 @@ Paxos protocol implementation for DBSIM
 from typing import List, Any
 from Node import Node
 
+# Outstanding TODOs:
+# - Phase 2a: If P does not receive any accepted operation from any of the acceptors, it will forward its own proposal for acceptance by sending accept(t, o) to all acceptors.
+# - Msg loss/timeout are not being handled
+
+
+
 class PaxosNode(Node):
     
     # TODO: modify arguments as needed
@@ -81,6 +87,11 @@ class PaxosNode(Node):
             # TODO: should it send the whole proposal back?
             self.accepted_id = accepted_id
 
+    class LearnMsg:
+        def __init__(self, proposal):
+            self.type = "LEARN"
+            self.proposal = proposal
+
 
     def determine_value_to_propose(self, ballot_num):
         # get the promises for this ballot (all entries for this ballot number)
@@ -135,7 +146,6 @@ class PaxosNode(Node):
                 pass
 
         elif msg_type == "PROMISE":
-            # TODO: Handle promise message
             # print(f"Node {self.id} handling PROMISE message from {src}")
 
             # Record the promise
@@ -143,19 +153,13 @@ class PaxosNode(Node):
                 self.promises[msg.ballot] = []
             self.promises[msg.ballot].append(msg)
 
-            # # if promise came with previously accepted proposal, store it
-            # if msg.accepted_prop:
-            #     self.potential_commands.append(msg.accepted_prop)
-
             # Check if a majority of promises have been received for this ballot
             if len(self.promises[msg.ballot]) >= self.quorum_size:
                 # Determine the value v for the proposal
                 
-                # TODO: implement this
                 value = self.determine_value_to_propose(ballot_num=msg.ballot)
 
                 # Send accept requests to the quorum
-                # proposal = PaxosNode.Proposal(ballot_num, value)
                 proposal = self.create_proposal(value)
                 accept_msg = PaxosNode.AcceptMsg(proposal)
                 # send accept msgs only to the nodes that promised
@@ -190,6 +194,9 @@ class PaxosNode(Node):
             # TODO: Handle accepted message
             print(f"Node {self.id} handling ACCEPTED message from {src}")
             pass
+        elif msg_type == "LEARN":
+            # TODO: implement
+            pass
         else:
             # Client request, prepare to propose it 
             print(f"Node {self.id} handling CLIENT REQUEST message from {src}")
@@ -203,14 +210,10 @@ class PaxosNode(Node):
                 self.net.send(self.id, leader_id, msg)
                 return
 
-            # TODO: this is incorrect. proposals values are selected in phase 2a
-            # proposal = self.create_proposal(msg)
-
             # add client request to potential commands
             self.potential_commands.append(msg)
 
             # Send prepare messages to all acceptors
-            # prepare_msg = PaxosNode.PrepareMsg(proposal.ballot)
             prepare_msg = PaxosNode.PrepareMsg(self.ballot) # use the current ballot number, will inc later
             # TODO: right now it sends to all, optimization: send to a (randomly selected?) quorum only
             for node in self.all_nodes:
