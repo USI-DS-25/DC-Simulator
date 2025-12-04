@@ -74,6 +74,9 @@ class Simulator:
             timer_id = ev.data.get("timer_id")
             node.on_timer(timer_id)
 
+        else:
+            raise ValueError(f"Unknown event kind: {ev.kind}")
+
     def log(self, node_id: int, message: str) -> None:
         """Log a message with timestamp."""
         self.logs.append((self.time, node_id, message))
