@@ -1,4 +1,6 @@
-@startuml
+@startuml DBsim_DC_Simulator_UML_Architecture
+
+
 skinparam classAttributeIconSize 0
 
 abstract class Node {
