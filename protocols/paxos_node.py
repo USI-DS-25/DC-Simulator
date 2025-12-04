@@ -4,10 +4,12 @@ Paxos protocol implementation for DBSIM
 
 from typing import List, Any
 from Node import Node
+import time
 
 # Outstanding TODOs:
 # - Phase 2a: If P does not receive any accepted operation from any of the acceptors, it will forward its own proposal for acceptance by sending accept(t, o) to all acceptors.
 # - Msg loss/timeout are not being handled
+# - Multi leader paxos doesnt work (yet) (leader 2 will receive an accept from 1 and accept it, since its highest promised_ballot is 1)
 
 
 
@@ -20,6 +22,7 @@ class PaxosNode(Node):
 
         # TODO: Configuration (eg quorum size)
         self.quorum_size = len(self.all_nodes) // 2 + 1
+        # TODO: add resend time for messages/timeouts
 
         # Persistent state (if node acts as acceptor)
         self.store.setdefault('promised_ballot', None) # highest ballot _promised_
@@ -70,10 +73,12 @@ class PaxosNode(Node):
             # TODO: add server id for leader change?
 
     class PromiseMsg: # phase 1b
-        def __init__(self, acceptor_id, accepted_prop, ballot):
+        # def __init__(self, acceptor_id, accepted_prop, ballot):
+        def __init__(self, acceptor_id, ballot, accepted_prop=None):
             self.type = "PROMISE"
-            self.accepted_prop = accepted_prop # previously accepted proposal (if any)
-            self.ballot = ballot
+            # previously accepted proposal (if any)
+            self.accepted_prop = accepted_prop 
+            self.ballot = ballot # promised ballot number
             self.id = acceptor_id
 
     class AcceptMsg: # phase 2a
@@ -101,11 +106,14 @@ class PaxosNode(Node):
 
         if highest_proposal:
             # if there was a stored promisse, use the one w the highest proposal number
-            value = highest_proposal[1]  # Use the value of the highest-numbered proposal
+            value = highest_proposal[1] # value
+
             # ballot_num = highest_proposal[0]
         else:
             # Use any value (e.g., the first potential command from a client)
+            print("UNO")
             value = self.potential_commands.pop(0)
+            print("DOS")
             # ballot_num = self.ballot
 
         return value
@@ -128,7 +136,7 @@ class PaxosNode(Node):
 
         # TODO: this if-else chain is ugly as heck, refactor later
         if msg_type == "PREPARE":
-            print(f"Node {self.id} handling PREPARE message from {src}")
+            # print(f"Node {self.id} handling PREPARE message from {src}")
             # check if node has already promised a higher ballot
             if self.store['promised_ballot'] is None or msg.ballot > self.store['promised_ballot']:
                 # promise the ballot
@@ -136,25 +144,32 @@ class PaxosNode(Node):
                 # send promise back, including previously accepted proposal (if any)
                 if self.store['accepted_prop'] is not None:
                     accepted_prop = self.store['accepted_prop']
-                    ballot_num = accepted_prop[0]
+                    # ballot_num = accepted_prop[0]
                 else:
                     accepted_prop = None
-                    ballot_num = msg.ballot
+                    # ballot_num = msg.ballot
 
-                promise_msg = PaxosNode.PromiseMsg(self.id, accepted_prop, ballot_num)
+                # promise_msg = PaxosNode.PromiseMsg(self.id, accepted_prop, ballot_num)
+                if accepted_prop:
+                    promise_msg = PaxosNode.PromiseMsg(self.id, msg.ballot, accepted_prop)
+                else:
+                    promise_msg = PaxosNode.PromiseMsg(self.id, msg.ballot)
+                # promise_msg = PaxosNode.PromiseMsg(self.id, msg.ballot, accepted_prop)
                 self.net.send(self.id, src, promise_msg)
+                # print(f"<PROM, {msg.ballot}, n_{self.id} -> S_{src}>")
             else:
                 # ignore the prepare message
                 # TODO: can remove this else block, i'll leave it rn for clarity
                 pass
 
         elif msg_type == "PROMISE":
-            print(f"Node {self.id} handling PROMISE message from {src}")
+            # print(f"Node {self.id} handling PROMISE message from {src}")
 
             # Record the promise
             if msg.ballot not in self.promises:
                 self.promises[msg.ballot] = []
             self.promises[msg.ballot].append(msg)
+
 
             # Check if a majority of promises have been received for this ballot
             if len(self.promises[msg.ballot]) >= self.quorum_size:
@@ -166,17 +181,21 @@ class PaxosNode(Node):
                 proposal = self.create_proposal(value)
                 accept_msg = PaxosNode.AcceptMsg(proposal)
                 # send accept msgs only to the nodes that promised
-                for node in self.promises[msg.ballot]:
+                
+                for promise in self.promises[msg.ballot]:
                     # print(f"Node {self.id} sending ACCEPT message to Node {node.id}")
-                    self.net.send(self.id, node.id, accept_msg)
+                    self.net.send(self.id, promise.id, accept_msg)
+                    # print(f"<ACC, S_{self.id} -> n_{promise.id}, {proposal.ballot}, {proposal.value}>")
+
+                # TODO: should we do the same +1 logic here as in learn msgs? since the node itself is also an acceptor
+                # it seems to be working without it for now tho, idk
 
                 # TODO: should we clear promises after sending accept msgs? not here
                 # ofc, we might have to retransmit
 
-            pass
         elif msg_type == "ACCEPT":
             # TODO: Handle accept message
-            print(f"Node {self.id} handling ACCEPT message from {src}")
+            # print(f"Node {self.id} handling ACCEPT message from {src}")
 
             # check if node has already responded to a prepare request with a greater ballot
             if self.store['promised_ballot'] is None or msg.proposal.ballot >= self.store['promised_ballot']:
@@ -194,6 +213,7 @@ class PaxosNode(Node):
                 for node in self.all_nodes:
                     if node != self.id:
                         self.net.send(self.id, node, learn_msg)
+                        # print(f"<LRN, n_{self.id} -> S_{node}, {msg.proposal.ballot}, {msg.proposal.value}>")
 
                 # since theoretically all processes play the roles of proposer, acceptor, and learner,
                 # the node should also learn the proposal itself by sending it. we can simulate this by
@@ -206,10 +226,11 @@ class PaxosNode(Node):
             else:
                 # ignore the accept message
                 # can skip this block, leaving it for clarity
+                # print(f"ignored ACCEPT message at Node {self.id} from {src} due to higher promised ballot")
                 pass
 
         elif msg_type == "LEARN":
-            print(f"Node {self.id} handling LEARN message from {src}")
+            # print(f"Node {self.id} handling LEARN message from {src}")
 
             proposal_id = msg.proposal.ballot
             if proposal_id not in self.learn_requests_received:
@@ -217,20 +238,42 @@ class PaxosNode(Node):
             self.learn_requests_received[proposal_id].append(msg)
 
             # Check if a majority of learn requests have been received for this proposal
-            # do +1 because the node itself counts as a learner TODO: check if this is correct
             if len(self.learn_requests_received[proposal_id]) >= self.quorum_size:
                 # Execute the learned command
                 # TODO: implement a proper command execution mechanism
-                # TODO: this isnt firing :/
                 print(f"Node {self.id} learned and executing command: {msg.proposal.value}")
                 # Forget about the learned proposal
                 self.learn_requests_received.pop(proposal_id, None)
+                # clear the accepted proposal if it matches
+                if (self.store['accepted_prop'] is not None and 
+                    self.store['accepted_prop'][0] == proposal_id):
+                    self.store['accepted_prop'] = None
+
+                # check if there are pending commands to be executed. if so, propose them
+                # note: this is not exactly how paxos is supposed to work, but for simplicity we do it this way
+                # TODO: implement proper command queueing and execution
+
+                # note: no need to check if node is leader, since only leaders store potential commands
+                if len(self.potential_commands) > 0:
+
+                    # Send prepare messages to all acceptors
+                    prepare_msg = PaxosNode.PrepareMsg(self.ballot) # use the current ballot number, will inc later
+                    # TODO: right now it sends to all, optimization: send to a (randomly selected?) quorum only
+                    for node in self.all_nodes:
+                        if node != self.id:
+                            # print(f"<PREP, S_{self.id} -> n_{node}, b: {self.ballot}>")
+                            self.net.send(self.id, node, prepare_msg)
+                        
+                    # Wait for a short duration before the next iteration
+                    # time.sleep(1)
+
+                    # TODO: should also check for pending promises and accept msgs to retransmit
+                
             
 
         else:
             # Client request, prepare to propose it 
-            print(f"Node {self.id} handling CLIENT REQUEST message from {src}")
-            # pass
+            # print(f"Node {self.id} handling CLIENT REQUEST message from {src}")
 
             # TODO: let distinguished leader handle client requests by fowarding them to it
             if not self.is_leader:
@@ -248,6 +291,7 @@ class PaxosNode(Node):
             # TODO: right now it sends to all, optimization: send to a (randomly selected?) quorum only
             for node in self.all_nodes:
                 if node != self.id:
+                    # print(f"<PREP, S_{self.id} -> n_{node}>, b: {self.ballot}")
                     self.net.send(self.id, node, prepare_msg)
         
         self.state = "IDLE"

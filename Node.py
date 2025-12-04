@@ -43,7 +43,6 @@ class Node(ABC):
     @abstractmethod
     def on_message(self, src: int, msg: Any):
         """Called when a message is delivered to this node."""
-        print(f"Node {self.id} received message from {src}: {msg}")
         pass
 
     @abstractmethod
