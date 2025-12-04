@@ -160,7 +160,8 @@ class PaxosNode(Node):
                 accept_msg = PaxosNode.AcceptMsg(proposal)
                 # send accept msgs only to the nodes that promised
                 for node in self.promises[msg.ballot]:
-                    self.net.send(self.id, node, accept_msg)
+                    print(f"Node {self.id} sending ACCEPT message to Node {node.id}")
+                    self.net.send(self.id, node.id, accept_msg)
 
                 # TODO: should we clear promises after sending accept msgs? not here
                 # ofc, we might have to retransmit
