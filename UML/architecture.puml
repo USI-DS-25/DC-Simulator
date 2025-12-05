@@ -75,7 +75,6 @@ abstract class Node {
   + send(dst, msg)
   + sync_send(dst, msg, timeout)
   + set_timer(delay, timer_id)
-  + update_metrics()
 }
 
 class SimpleTestNode {
@@ -131,16 +130,16 @@ Node <|-- Client
 ' ============ CONFIGURATION ============
 
 class Config {
-  - num_nodes: int = 5
-  - algorithm: str = "simple_test"
-  - base_network_delay: float = 1.0
-  - packet_loss_rate: float = 0.0
-  - sync_delay: float = 0.5
-  - p_sync_violate: float = 0.01
-  - num_clients: int = 1
-  - num_requests_per_client: int = 100
-  - inter_request_time: float = 1.0
-  - reset_on_error: bool = true
+  - num_nodes: int 
+  - algorithm: str 
+  - base_network_delay: 
+  - packet_loss_rate: float 
+  - sync_delay: float 
+  - p_sync_violate: float 
+  - num_clients: int 
+  - num_requests_per_client: int 
+  - inter_request_time: float 
+  - reset_on_error: bool 
 }
 
 ' ============ ALGORITHM MANAGEMENT ============

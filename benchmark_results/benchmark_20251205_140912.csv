@@ -1,2 +1,2 @@
 protocol,num_nodes,network_delay,packet_loss,num_requests,duration,total_messages,throughput_mps,latency_min,latency_max,latency_avg,latency_median,latency_p95,latency_p99,commits,aborts,commit_rate,avg_cpu,avg_memory,timestamp
-simple_test,5,1.0,0.0,100,200.0,0,0.0,0,0,0,0,0,0,0,0,0.0,12,41.8,2025-12-04T20:32:08.653904
+simple_test,5,1.0,0.0,100,200.0,995,4.975,0,0,0,0,0,0,0,0,0.0,15.8,35.8,2025-12-05T14:09:12.561879

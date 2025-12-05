@@ -2,11 +2,13 @@
 """
 Simulation configuration with network, synchronization, and fault parameters.
 """
+from abc import ABC
+
 
 from dataclasses import dataclass
 
 @dataclass
-class Config:
+class Config(ABC):
     # Basic setup
     num_nodes: int = 5
     algorithm: str = "simple_test"  # "simple_test" or add new ones to ALGORITHM_REGISTRY

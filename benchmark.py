@@ -83,21 +83,18 @@ class BenchmarkRunner:
                     node.store['role'] = 'BACKUP'
                 nodes[nid] = node
                 sim.nodes[nid] = node
+
             
-            # Create and schedule clients
+            
+            # Create and start clients
             clients = []
             for i in range(config.num_clients):
-                client_id = config.num_nodes + i
-                client = Client(client_id, sim, net, sim.logger)
+                client = Client(config.num_nodes + i, sim, net, logger=self.logger)
+                sim.register_node(client.id, client)
                 clients.append(client)
-                sim.nodes[client_id] = client
-                
-                # Schedule requests
-                for req in range(config.num_requests_per_client):
-                    delay = i * config.inter_request_time + req * config.inter_request_time
-                    sim.schedule(delay, "TIMER", client_id, {"timer_id": f"request_{req}"})
-            
-            # Run simulation
+                client.on_start()  
+
+        # Run simulation
             sim.run(until_time=config.inter_request_time * config.num_requests_per_client * 2)
             
             # Collect metrics
@@ -129,7 +126,7 @@ class BenchmarkRunner:
         
         # Count total messages
         total_messages = sum(getattr(node, 'messages_sent', 0) for node in nodes.values())
-        
+        print("DEBUGGG", total_messages)
         # Calculate throughput
         duration = sim.time if sim.time > 0 else 1
         throughput_mps = total_messages / duration if duration > 0 else 0
@@ -137,8 +134,9 @@ class BenchmarkRunner:
         # Collect latencies
         latencies = []
         for client in clients:
-            if hasattr(client, 'latencies'):
-                latencies.extend([lat for lat in client.latencies if lat > 0])
+            summary = client.summary()
+            if summary:
+                latencies.extend([summary['min_latency'], summary['avg_latency'], summary['max_latency']])
         
         if latencies:
             latency_stats = {
@@ -154,7 +152,14 @@ class BenchmarkRunner:
                 'min': 0, 'max': 0, 'avg': 0,
                 'median': 0, 'p95': 0, 'p99': 0
             }
-        
+        ## print all values in node for debug
+        for node in nodes.values():
+            print("Node ID:", node.id)
+            print("Messages Sent:", getattr(node, 'messages_sent', 0))
+            print("Store Contents:", node.store)
+            print("CPU Usage:", getattr(node, 'cpu_usage', 0))
+            print("Memory Usage:", getattr(node, 'memory_usage', 0))
+            print("-----")            
         # Count commits
         commits = sum(node.store.get('commits', 0) for node in nodes.values())
         commit_rate = commits / duration if duration > 0 else 0

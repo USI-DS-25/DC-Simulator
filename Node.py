@@ -49,6 +49,7 @@ class Node(ABC):
         """Send a message asynchronously to another node."""
         self.net.send(self.id, dst, msg)
         self.messages_sent += 1
+       
 
     def sync_send(self, dst: int, msg: Any, timeout: Optional[float] = None) -> bool:
         """Send a message synchronously (with delivery guarantee)."""
@@ -61,11 +62,4 @@ class Node(ABC):
         fire_time = self.sim.time + delay
         self.sim.schedule(fire_time, "TIMER", self.id, {"timer_id": timer_id})
     
-    def update_metrics(self) -> None:
-        """Update node resource usage metrics."""
-        # Note: self.state is not defined; skipping CPU update based on state
-        self.cpu_usage = max(5, min(100, self.cpu_usage + random.randint(-10, 15)))
-
-        self.memory_usage = max(30, min(85, self.memory_usage + random.randint(-5, 5)))
-        self.disk_usage = min(98, self.disk_usage + random.uniform(0, 0.05))
-
+    
