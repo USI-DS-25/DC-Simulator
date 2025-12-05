@@ -1,6 +1,6 @@
 """
 Comprehensive benchmarking module for DBSIM.
-Runs controlled experiments with the algorithm specified in config.py
+Updated to measure TPS (Transactions Per Second) and automate experiments.
 """
 
 import statistics
@@ -28,7 +28,8 @@ class BenchmarkResult:
     num_requests: int
     duration: float
     total_messages: int
-    throughput_mps: float
+    throughput_mps: float # Messages per second (Network Load)
+    throughput_tps: float # Transactions per second (REAL Performance) [YENİ]
     latency_min: float
     latency_max: float
     latency_avg: float
@@ -52,58 +53,76 @@ class BenchmarkRunner:
         self.results: List[BenchmarkResult] = []
         self.logger = Logger()
     
-    def run_experiment(self, config: Config) -> Optional[BenchmarkResult]:
+    def run_experiment(self, config: Config, inject_failure: bool = False) -> Optional[BenchmarkResult]:
         """Run a single experiment with the given config"""
         try:
             print(f"\n🔬 Running: {config.algorithm} | "
-                  f"N={config.num_nodes} | "
-                  f"delay={config.base_network_delay}ms | "
-                  f"loss={config.packet_loss_rate*100:.1f}%")
+                  f"Nodes={config.num_nodes} | "
+                  f"Loss={config.packet_loss_rate*100:.1f}% | "
+                  f"Failure={'YES' if inject_failure else 'NO'}")
             
             # Setup simulator
             sim = Simulator()
             sim.config = config
             net = Network(sim, config)
             
-            # Get algorithm from ALGORITHM_REGISTRY
+            # Get algorithm
             algo_case = ALGORITHM_REGISTRY.get(config.algorithm)
             if not algo_case:
                 print(f"❌ Unknown algorithm: {config.algorithm}")
                 return None
             
-            # Create nodes using algorithm from config
+            # Create nodes
             node_ids = list(range(config.num_nodes))
             nodes = {}
-            
             for nid in node_ids:
                 node = algo_case.create_node(nid, sim, net, node_ids)
-                if nid == 0:
-                    node.store['role'] = 'PRIMARY'
-                else:
-                    node.store['role'] = 'BACKUP'
+                # Helper: Set initial roles if needed (mostly for PB, Paxos handles itself)
+                if config.algorithm == 'primary_backup':
+                    if nid == max(node_ids):
+                        node.role = 'PRIMARY'
+                    else:
+                        node.role = 'BACKUP'
+                
+                sim.register_node(nid, node)
                 nodes[nid] = node
-                sim.nodes[nid] = node
-
             
-            
-            # Create and start clients
+            # Create Clients
             clients = []
             for i in range(config.num_clients):
-                client = Client(config.num_nodes + i, sim, net, logger=self.logger)
-                sim.register_node(client.id, client)
+                client_id = 1000 + i # Give clients high IDs
+                client = Client(client_id, sim, net, sim.logger)
+                # Client needs to know who to contact (Usually max ID initially)
+                client.primary_id = max(node_ids) 
                 clients.append(client)
-                client.on_start()  
-
-        # Run simulation
-            sim.run(until_time=config.inter_request_time * config.num_requests_per_client * 2)
+                sim.register_node(client_id, client)
+                client.on_start() # Schedule first request
+            
+            # --- FAILURE INJECTION SCENARIO ---
+            # We run slightly longer to allow recovery
+            max_time = config.inter_request_time * config.num_requests_per_client * 2.5
+            
+            if inject_failure:
+                # 1. Run for half the time (let system stabilize)
+                half_time = max_time / 3.0
+                sim.run(until_time=half_time)
+                
+                # 2. Kill the Leader (Node with max ID usually starts as leader)
+                victim_id = max(node_ids)
+                print(f"⚡ CRASH: Killing Node {victim_id} (Leader) at t={sim.time:.1f}ms")
+                
+                # Remove from simulator so it stops processing events
+                if victim_id in sim.nodes:
+                    sim.nodes.pop(victim_id)
+                
+                # 3. Resume simulation
+                sim.run(until_time=max_time)
+            else:
+                # Normal run
+                sim.run(until_time=max_time)
             
             # Collect metrics
-            result = self._collect_metrics(
-                config=config,
-                sim=sim,
-                clients=clients,
-                nodes=nodes
-            )
+            result = self._collect_metrics(config, sim, clients, nodes)
             
             self.results.append(result)
             self._print_result_summary(result)
@@ -115,28 +134,26 @@ class BenchmarkRunner:
             traceback.print_exc()
             return None
     
-    def _collect_metrics(
-        self,
-        config: Config,
-        sim: Simulator,
-        clients: List[Client],
-        nodes: Dict
-    ) -> BenchmarkResult:
-        """Collect and aggregate metrics from simulation"""
+    def _collect_metrics(self, config: Config, sim: Simulator, clients: List[Client], nodes: Dict) -> BenchmarkResult:
         
-        # Count total messages
+        # 1. Throughput Calculation
+        # Count total messages sent by all nodes (including crashed ones if tracked)
         total_messages = sum(getattr(node, 'messages_sent', 0) for node in nodes.values())
-        print("DEBUGGG", total_messages)
-        # Calculate throughput
-        duration = sim.time if sim.time > 0 else 1
-        throughput_mps = total_messages / duration if duration > 0 else 0
         
-        # Collect latencies
+        # Count COMMITS (Real work done)
+        # We sum commits from CLIENTS (replies received) to be sure
+        total_replies = sum(client.reply_count for client in clients)
+        
+        duration = sim.time if sim.time > 0 else 1
+        
+        throughput_mps = total_messages / duration
+        throughput_tps = (total_replies / duration) * 1000 # Transactions per second
+        
+        # 2. Latency Stats
         latencies = []
         for client in clients:
-            summary = client.summary()
-            if summary:
-                latencies.extend([summary['min_latency'], summary['avg_latency'], summary['max_latency']])
+            if hasattr(client, 'latencies'):
+                latencies.extend(client.latencies)
         
         if latencies:
             latency_stats = {
@@ -148,27 +165,13 @@ class BenchmarkRunner:
                 'p99': self._percentile(latencies, 99),
             }
         else:
-            latency_stats = {
-                'min': 0, 'max': 0, 'avg': 0,
-                'median': 0, 'p95': 0, 'p99': 0
-            }
-        ## print all values in node for debug
-        for node in nodes.values():
-            print("Node ID:", node.id)
-            print("Messages Sent:", getattr(node, 'messages_sent', 0))
-            print("Store Contents:", node.store)
-            print("CPU Usage:", getattr(node, 'cpu_usage', 0))
-            print("Memory Usage:", getattr(node, 'memory_usage', 0))
-            print("-----")            
-        # Count commits
-        commits = sum(node.store.get('commits', 0) for node in nodes.values())
-        commit_rate = commits / duration if duration > 0 else 0
+            latency_stats = {'min': 0, 'max': 0, 'avg': 0, 'median': 0, 'p95': 0, 'p99': 0}
         
-        # Calculate average CPU and memory
+        # 3. Resource Usage (Avg of alive nodes)
+        # Filter out crashed nodes from stats if they were removed from 'nodes' dict? 
+        # No, 'nodes' dict still has reference, sim.nodes doesn't.
         cpu_values = [getattr(node, 'cpu_usage', 0) for node in nodes.values()]
         mem_values = [getattr(node, 'memory_usage', 0) for node in nodes.values()]
-        avg_cpu = statistics.mean(cpu_values) if cpu_values else 0
-        avg_memory = statistics.mean(mem_values) if mem_values else 0
         
         return BenchmarkResult(
             protocol=config.algorithm,
@@ -179,75 +182,70 @@ class BenchmarkRunner:
             duration=duration,
             total_messages=total_messages,
             throughput_mps=throughput_mps,
+            throughput_tps=throughput_tps, # Added TPS
             latency_min=latency_stats['min'],
             latency_max=latency_stats['max'],
             latency_avg=latency_stats['avg'],
             latency_median=latency_stats['median'],
             latency_p95=latency_stats['p95'],
             latency_p99=latency_stats['p99'],
-            commits=commits,
-            commit_rate=commit_rate,
-            avg_cpu=avg_cpu,
-            avg_memory=avg_memory
+            commits=total_replies, # Use client replies as confirmed commits
+            commit_rate=total_replies / config.num_requests_per_client if config.num_requests_per_client > 0 else 0,
+            avg_cpu=statistics.mean(cpu_values) if cpu_values else 0,
+            avg_memory=statistics.mean(mem_values) if mem_values else 0
         )
     
     def _percentile(self, data: List[float], percentile: int) -> float:
-        """Calculate percentile value"""
-        if not data:
-            return 0
+        if not data: return 0
         sorted_data = sorted(data)
         idx = int(len(sorted_data) * percentile / 100)
         return sorted_data[min(idx, len(sorted_data) - 1)]
     
     def _print_result_summary(self, result: BenchmarkResult):
-        """Print summary of a benchmark result"""
-        print(f"  ✓ Throughput: {result.throughput_mps:.2f} msg/s")
-        print(f"  ✓ Latency avg: {result.latency_avg:.4f}ms (p95: {result.latency_p95:.4f}ms)")
-        print(f"  ✓ Total messages: {result.total_messages}")
+        print(f"  ✓ TPS (Real Speed): {result.throughput_tps:.2f} ops/sec")
+        print(f"  ✓ Latency Avg:      {result.latency_avg:.2f} ms")
+        print(f"  ✓ Success Rate:     {result.commits} commits")
+        print(f"  ✓ Network Load:     {result.total_messages} messages")
     
-    def export_csv(self, filename: Optional[str] = None) -> str:
-        """Export results to CSV"""
+    def export_csv(self, filename: Optional[str] = None):
         if not filename:
-            filename = f"benchmark_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filename = f"benchmark_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         
         filepath = self.output_dir / filename
         
         with open(filepath, 'w', newline='') as csvfile:
             fieldnames = [f.name for f in BenchmarkResult.__dataclass_fields__.values()]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            
             writer.writeheader()
             for result in self.results:
                 writer.writerow(asdict(result))
         
-        print(f"\n📊 CSV exported: {filepath}")
-        return str(filepath)
+        print(f"\n📊 CSV exported to: {filepath}")
 
 
 def main():
-    """Run benchmark using algorithm from config.py"""
-    print("\n" + "="*70)
-    print("🚀 DBSIM Benchmark Suite")
-    print("="*70)
+    print("="*60)
+    print("🚀 DBSIM Automated Benchmark Suite")
+    print("="*60)
     
-    runner = BenchmarkRunner(output_dir="benchmark_results")
+    runner = BenchmarkRunner()
+ 
+    protocols = ['paxos', 'primary_backup']
     
-    # Load config - uses algorithm specified in config.py
-    config = Config()
+    for proto in protocols:
+        print(f"\n--- Testing Protocol: {proto.upper()} ---")
+        
     
-    print(f"\nℹ️  Using algorithm: {config.algorithm}")
-    print(f"ℹ️  Config: {config.num_nodes} nodes, delay={config.base_network_delay}ms, loss={config.packet_loss_rate}")
-    
-    # Run single experiment with config
-    runner.run_experiment(config)
-    
-    # Export results
-    csv_file = runner.export_csv()
-    
-    print("\n" + "="*70)
-    print("✅ Benchmark complete!")
-    print("="*70)
+        cfg = Config(num_nodes=5, algorithm=proto)
+        runner.run_experiment(cfg)
+        
+   
+        print(f"--- Crash Test: {proto.upper()} ---")
+        cfg_fail = Config(num_nodes=5, algorithm=proto)
+        runner.run_experiment(cfg_fail, inject_failure=True)
 
+    runner.export_csv()
+    print("\n✅ All benchmarks completed.")
 
 if __name__ == "__main__":
     main()

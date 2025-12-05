@@ -37,11 +37,9 @@ class Network {
   - message_history: List
   - packets_sent: int
   - packets_dropped: int
-  - packets_delayed_sync: int
-  - switch_queues: Dict[int, float]
+  - reorder_queue: List
   --
   - _sample_delay()
-  - _apply_queuing_delay(dst, arrival_time)
   + send(src, dst, msg)
   + sync_send(src, dst, msg, timeout)
   + get_stats()
@@ -65,20 +63,18 @@ abstract class Node {
   - store: Dict
   - messages_received: int
   - messages_sent: int
-  - last_checked_msgs: int
   - is_critical: bool
   - faults: List[str]
-  - cpu_usage: float
-  - memory_usage: float
-  - disk_usage: float
+  - cpu_usage: int
+  - memory_usage: int
+  - disk_usage: int
   - power_watts: float
   --
   + {abstract} on_message(src, msg)
   + {abstract} on_timer(timer_id)
   + send(dst, msg)
-  + sync_send(dst, msg, timeout) : bool
+  + sync_send(dst, msg, timeout)
   + set_timer(delay, timer_id)
-  + update_metrics()
 }
 
 class SimpleTestNode {
@@ -93,39 +89,21 @@ class SimpleTestNode {
 class PaxosNode {
   - all_nodes: List[int]
   - quorum_size: int
-  - is_leader: bool
-  - current_leader: int
+  - promised_ballot: int
+  - accepted_prop: Tuple
   - ballot: int
   - potential_commands: List
-  - promises_received: Dict
-  - accepted_received: Dict
-  - heartbeat_interval: float
-  - election_timeout: float
+  - promises: dict
+  - learn_requests_received: dict
+  - proposal_in_progress: bool
+  - is_leader: bool
   --
-  + start_election()
   + next_ballot()
-  + broadcast_accept(value)
-  + determine_value(ballot)
-  + execute_command(value)
-  + send_heartbeat()
-  + reset_election_timer()
-  + on_message(src, msg)
-  + on_timer(timer_id)
-}
-
-class PrimaryBackupNode {
-  - all_nodes: List[int]
-  - data: List
-  - role: str
-  - current_primary: int
-  - pending_requests: Dict
-  - heartbeat_interval: float
-  - election_timeout: float
-  --
-  + become_primary()
-  + reset_election_timer()
-  + send_heartbeat()
-  + commit_and_reply(req_id)
+  + create_proposal(value)
+  + determine_value_to_propose(ballot_num)
+  + should_accept_proposal(proposal)
+  + should_learn_proposal(proposal)
+  + propose_next_command()
   + on_message(src, msg)
   + on_timer(timer_id)
 }
@@ -147,7 +125,6 @@ class Client {
 
 Node <|-- SimpleTestNode
 Node <|-- PaxosNode
-Node <|-- PrimaryBackupNode
 Node <|-- Client
 
 ' ============ CONFIGURATION ============
@@ -155,10 +132,8 @@ Node <|-- Client
 class Config {
   - num_nodes: int 
   - algorithm: str 
-  - base_network_delay: float
-  - network_jitter: float
+  - base_network_delay: 
   - packet_loss_rate: float 
-  - switch_processing_time: float
   - sync_delay: float 
   - p_sync_violate: float 
   - num_clients: int 
@@ -192,7 +167,6 @@ class BenchmarkResult {
   - duration: float
   - total_messages: int
   - throughput_mps: float
-  - throughput_tps: float
   - latency_min: float
   - latency_max: float
   - latency_avg: float
@@ -228,6 +202,10 @@ Network o-- Logger : uses
 
 Node o-- Network : uses
 Node o-- Logger : uses
+
+Client --|> Node : inherits
+SimpleTestNode --|> Node : inherits
+PaxosNode --|> Node : inherits
 
 AlgorithmCase --> Node : creates instances of
 algorithms o-- AlgorithmCase : contains
