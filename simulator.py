@@ -26,8 +26,6 @@ class Simulator:
         self._queue: List[Event] = []
         self._next_seq: int = 0
         self.nodes: Dict[int, "Node"] = {}
-        self.message_history: List[Dict] = []
-        self.logs: List[tuple] = []
         
         # Metrics and logger
         from logger import Logger
@@ -68,12 +66,12 @@ class Simulator:
             msg = ev.data.get("msg")
             node.on_message(src, msg)
             # Record in message history
-            self.message_history.append({
-                "time": self.time,
-                "src": src,
-                "dst": ev.node_id,
-                "msg": msg
-            })
+            # self.message_history.append({
+            #     "time": self.time,
+            #     "src": src,
+            #     "dst": ev.node_id,
+            #     "msg": msg
+            # })
 
         elif ev.kind == "TIMER":
             timer_id = ev.data.get("timer_id")
@@ -84,6 +82,7 @@ class Simulator:
 
     def log(self, node_id: int, message: str) -> None:
         """Log a message with timestamp."""
-        self.logs.append((self.time, node_id, message))
-        if len(self.logs) > 1000:
-            self.logs.pop(0)
+        # self.logs.append((self.time, node_id, message))
+        # if len(self.logs) > 1000:
+        #     self.logs.pop(0)
+        pass

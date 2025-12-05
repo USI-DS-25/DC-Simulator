@@ -1,11 +1,8 @@
 """
 Comprehensive benchmarking module for DBSIM.
-Runs controlled experiments across protocols, measures performance metrics,
-and generates comparative analysis reports.
+Runs controlled experiments with the algorithm specified in config.py
 """
 
-import json
-import time
 import statistics
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict, field
@@ -16,7 +13,6 @@ from pathlib import Path
 from simulator import Simulator
 from Network import Network
 from client import Client
-from metrics import MetricsCollector
 from logger import Logger
 from algorithms import ALGORITHM_REGISTRY
 from config import Config
@@ -68,15 +64,14 @@ class BenchmarkRunner:
             sim = Simulator()
             sim.config = config
             net = Network(sim, config)
-            sim.metrics = MetricsCollector()
             
-            # Get algorithm
+            # Get algorithm from ALGORITHM_REGISTRY
             algo_case = ALGORITHM_REGISTRY.get(config.algorithm)
             if not algo_case:
                 print(f"❌ Unknown algorithm: {config.algorithm}")
                 return None
             
-            # Create nodes
+            # Create nodes using algorithm from config
             node_ids = list(range(config.num_nodes))
             nodes = {}
             
@@ -225,26 +220,21 @@ class BenchmarkRunner:
 
 
 def main():
-    """Run benchmark suite with config variations"""
+    """Run benchmark using algorithm from config.py"""
     print("\n" + "="*70)
     print("🚀 DBSIM Benchmark Suite")
     print("="*70)
     
     runner = BenchmarkRunner(output_dir="benchmark_results")
     
-    # Test configurations
-    configs = [
-        # Simple test
-        Config(algorithm="simple_test", num_nodes=3, base_network_delay=1.0, packet_loss_rate=0.0),
-        Config(algorithm="simple_test", num_nodes=5, base_network_delay=1.0, packet_loss_rate=0.0),
-        
-        # Paxos
-        Config(algorithm="paxos", num_nodes=3, base_network_delay=1.0, packet_loss_rate=0.0),
-        Config(algorithm="paxos", num_nodes=5, base_network_delay=1.0, packet_loss_rate=0.0),
-    ]
+    # Load config - uses algorithm specified in config.py
+    config = Config()
     
-    for config in configs:
-        runner.run_experiment(config)
+    print(f"\nℹ️  Using algorithm: {config.algorithm}")
+    print(f"ℹ️  Config: {config.num_nodes} nodes, delay={config.base_network_delay}ms, loss={config.packet_loss_rate}")
+    
+    # Run single experiment with config
+    runner.run_experiment(config)
     
     # Export results
     csv_file = runner.export_csv()

@@ -20,14 +20,11 @@ class Node(ABC):
         self.logger = logger
         
         # State management
-        self.inbox: List[Any] = []
         self.store: Dict[str, Any] = {}  # Persistent storage for algorithm
-        self.state = "IDLE"  # "IDLE", "PROCESSING", "SHUTDOWN"
         
         # Metrics
         self.messages_received = 0
         self.messages_sent = 0
-        self.is_shutdown = False
         self.is_critical = False
         self.faults: List[str] = []
         
@@ -36,11 +33,6 @@ class Node(ABC):
         self.memory_usage = random.randint(30, 50)
         self.disk_usage = random.randint(40, 60)
         self.power_watts = 0
-        
-        # Clock and timers
-        self.local_clock = 0.0
-        self.timers: Dict[str, tuple] = {}  # timer_id -> (callback, args, kwargs)
-        self.pending_sync_sends: Dict[str, tuple] = {}  # msg_id -> (timestamp, callback)
 
     @abstractmethod
     def on_message(self, src: Any, msg: Any):
@@ -71,50 +63,9 @@ class Node(ABC):
     
     def update_metrics(self) -> None:
         """Update node resource usage metrics."""
-        if self.is_shutdown:
-            self.cpu_usage = 0
-            self.memory_usage = 0
-            self.disk_usage = 0
-            self.power_watts = 0
-            return
-
-        if self.state == "PROCESSING":
-            self.cpu_usage = min(100, self.cpu_usage + random.randint(5, 15))
-        else:
-            self.cpu_usage = max(5, self.cpu_usage - random.randint(0, 10))
+        # Note: self.state is not defined; skipping CPU update based on state
+        self.cpu_usage = max(5, min(100, self.cpu_usage + random.randint(-10, 15)))
 
         self.memory_usage = max(30, min(85, self.memory_usage + random.randint(-5, 5)))
         self.disk_usage = min(98, self.disk_usage + random.uniform(0, 0.05))
-
-        # Detect faults
-        if self.cpu_usage > 90:
-            if "High CPU Load" not in self.faults:
-                self.faults.append("High CPU Load")
-        elif "High CPU Load" in self.faults:
-            self.faults.remove("High CPU Load")
-
-        if self.memory_usage > 90:
-            if "Memory Exhaustion" not in self.faults:
-                self.faults.append("Memory Exhaustion")
-        elif "Memory Exhaustion" in self.faults:
-            self.faults.remove("Memory Exhaustion")
-
-        if self.disk_usage > 90:
-            if "Disk Space Low" not in self.faults:
-                self.faults.append("Disk Space Low")
-        elif "Disk Space Low" in self.faults:
-            self.faults.remove("Disk Space Low")
-
-        # Random hardware faults
-        if random.random() < 0.005 and len(self.faults) < 3:
-            fault_types = ["Network Interface Down", "Memory Error", "Disk I/O Error"]
-            for ft in fault_types:
-                if random.random() < 0.1 and ft not in self.faults:
-                    self.faults.append(ft)
-
-        self.is_critical = len(self.faults) > 0
-        
-        # Power calculation
-        base_power = 120 + 30  # Base power estimate
-        self.power_watts = base_power * (0.3 + 0.7 * (self.cpu_usage / 100))
 
