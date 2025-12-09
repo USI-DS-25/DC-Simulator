@@ -52,7 +52,7 @@ class PaxosNode(Node):
         self.reset_election_timer()
 
         # TODO: REMOVE
-        self.clear_file_commands()
+        # self.clear_file_commands()
 
 
     # TODO: REMOVE
@@ -83,12 +83,14 @@ class PaxosNode(Node):
         #     self.send(n, msg)
         # self.reset_election_timer()
 
-    def broadcast_prepare(self, value):
+    def broadcast_prepare(self):
         """Helper to broadcast Prepare messages."""
-        msg = self.PrepareMsg(value)
+        msg = self.PrepareMsg(self.ballot)
         for n in self.all_nodes:
             # DUZELTME: self.send kullan
             self.send(n, msg)
+        # increment ballot for next prepare
+        self.ballot += len(self.all_nodes)
 
     def broadcast_accept(self, value):
         """Helper to broadcast Accept messages."""
@@ -159,12 +161,6 @@ class PaxosNode(Node):
 
         # 5. LEARN (Learner logic)
         elif mtype == "LEARN":
-
-            # TODO: remove
-            # dont do anything for ballots > 100
-            if msg.ballot > 100:
-                pass
-
             prop = (msg.ballot, msg.value)
             if prop not in self.learn_received: self.learn_received[prop] = set()
             self.learn_received[prop].add(msg.id)
@@ -175,7 +171,7 @@ class PaxosNode(Node):
             committed_val = msg.value
 
             # TODO: REMOVE
-            self.execute_command(committed_val[2])
+            # self.execute_command(committed_val[2])
 
             if committed_val in self.potential_commands:
                 self.potential_commands.remove(committed_val)
@@ -192,22 +188,18 @@ class PaxosNode(Node):
 
         # 6. CLIENT REQUEST
         elif mtype == "REQUEST":
-
-            print(f"Node {self.id} received client request {msg['request_id']} at t={self.sim.time:.1f}ms")
-
             if self.is_leader:
                 cmd_tuple = (msg["client_id"], msg["request_id"], msg["data"])
                 if cmd_tuple not in self.potential_commands:
                     self.potential_commands.append(cmd_tuple)
-                    self.broadcast_accept(cmd_tuple)
-                    # self.broadcast_prepare(cmd_tuple)
+                    # self.broadcast_accept(cmd_tuple)
+                    self.broadcast_prepare()
                     
             elif self.current_leader is not None:
                 # DUZELTME: Lidere yönlendir
                 self.send(self.current_leader, msg)
 
     def on_timer(self, timer_id):
-        print("THIS FIRED")
         if timer_id == "election_timer":
             if not self.is_leader: self.start_election()
             else: self.reset_election_timer()
