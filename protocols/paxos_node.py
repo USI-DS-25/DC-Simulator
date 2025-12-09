@@ -50,6 +50,23 @@ class PaxosNode(Node):
         self.election_timeout = 200.0 + random.uniform(0, 100)
         self.reset_election_timer()
 
+        # TODO: REMOVE
+        # self.clear_file_commands()
+
+
+    # TODO: REMOVE
+    def execute_command(self, command):
+        # write the command to a new line of a file (named after the node id)
+        filename = f"paxos_node_{self.id}_commands.txt"
+        with open(filename, "a") as f:
+            f.write(f"{command}\n")
+
+    # TODO: REMOVE
+    def clear_file_commands(self):
+        filename = f"paxos_node_{self.id}_commands.txt"
+        with open(filename, "w") as f:
+            f.write("")
+
     def reset_election_timer(self):
         self.set_timer(self.election_timeout, "election_timer")
 
@@ -136,8 +153,14 @@ class PaxosNode(Node):
             if key not in self.accepted_received: self.accepted_received[key] = set()
             self.accepted_received[key].add(msg.id)
             
-            if len(self.accepted_received[key]) >= self.quorum_size:
+            if len(self.accepted_received[key]) == self.quorum_size:
                 committed_val = msg.value
+
+                print(f"✅ Node {self.id} COMMITTED value: {committed_val} at t={self.sim.time:.1f}ms")
+
+                # TODO: REMOVE
+                # self.execute_command(committed_val[2])
+
                 if committed_val in self.potential_commands:
                     self.potential_commands.remove(committed_val)
                     self.store['commits'] = self.store.get('commits', 0) + 1
