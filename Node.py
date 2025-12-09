@@ -1,8 +1,7 @@
 # Node.py
 """
-Base node class for distributed algorithms with metrics and synchronization support.
+Base node class with realistic metrics.
 """
-
 from typing import Any, Optional, Dict, List, TYPE_CHECKING
 from Network import Network
 from abc import ABC, abstractmethod
@@ -11,61 +10,58 @@ import random
 if TYPE_CHECKING:
     from simulator import Simulator
 
-
 class Node(ABC):
     def __init__(self, node_id: int, sim: "Simulator", net: Network, logger=None):
         self.id = node_id
         self.sim = sim
         self.net = net
         self.logger = logger
-        
-        # State management
-        self.store: Dict[str, Any] = {}  # Persistent storage for algorithm
+        self.store: Dict[str, Any] = {}
         
         # Metrics
         self.messages_received = 0
         self.messages_sent = 0
-        self.is_critical = False
-        self.faults: List[str] = []
+        self.last_checked_msgs = 0
         
-        # Resource simulation
-        self.cpu_usage = random.randint(5, 25)
-        self.memory_usage = random.randint(30, 50)
-        self.disk_usage = random.randint(40, 60)
-        self.power_watts = 0
+        # Initial resources
+        self.cpu_usage = 5.0
+        self.memory_usage = 30.0
+        self.disk_usage = 40.0
+        self.power_watts = 0.0
+        self.faults = []
+        self.is_critical = False
 
     @abstractmethod
     def on_message(self, src: Any, msg: Any):
-        """Called when a message is delivered to this node."""
-        print(f"Node {self.id} received message from {src}: {msg}")
         pass
 
     @abstractmethod
     def on_timer(self, timer_id: Any):
-        """Called when a timer fires for this node."""
         pass
 
     def send(self, dst: int, msg: Any) -> None:
-        """Send a message asynchronously to another node."""
         self.net.send(self.id, dst, msg)
         self.messages_sent += 1
 
     def sync_send(self, dst: int, msg: Any, timeout: Optional[float] = None) -> bool:
-        """Send a message synchronously (with delivery guarantee)."""
-        self.net.sync_send(self.id, dst, msg, timeout)
-        self.messages_sent += 1
-        return True
+        try:
+            return self.net.sync_send(self.id, dst, msg, timeout)
+        except:
+            return False
 
     def set_timer(self, delay: float, timer_id: Any) -> None:
-        """Set a timer that will fire after delay time units."""
         fire_time = self.sim.time + delay
         self.sim.schedule(fire_time, "TIMER", self.id, {"timer_id": timer_id})
     
     def update_metrics(self) -> None:
-        """Update node resource usage metrics."""
-        # Note: self.state is not defined; skipping CPU update based on state
-        self.cpu_usage = max(5, min(100, self.cpu_usage + random.randint(-10, 15)))
-
-        self.memory_usage = max(30, min(85, self.memory_usage + random.randint(-5, 5)))
-        self.disk_usage = min(98, self.disk_usage + random.uniform(0, 0.05))
-
+        """Update metrics based on real load."""
+        delta = self.messages_received - self.last_checked_msgs
+        self.last_checked_msgs = self.messages_received
+        
+        # CPU increases with message load
+        load = 5.0 + (delta * 0.5)
+        self.cpu_usage = max(5.0, min(100.0, load + random.uniform(-1, 1)))
+        
+        # Memory increases with store size
+        mem = 30.0 + (len(self.store) * 0.1)
+        self.memory_usage = max(30.0, min(90.0, mem))
