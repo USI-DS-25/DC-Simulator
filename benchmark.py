@@ -218,7 +218,11 @@ class BenchmarkRunner:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for result in self.results:
-                writer.writerow(asdict(result))
+                row = asdict(result)
+                for k, v in list(row.items()):
+                    if isinstance(v, float):
+                        row[k] = round(v, 2)
+                writer.writerow(row)
         
         print(f"\n📊 CSV exported to: {filepath}")
 
