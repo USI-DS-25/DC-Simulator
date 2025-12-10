@@ -25,7 +25,6 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-benchmarks_results/
 benchmark_results/
 
 # PyInstaller
