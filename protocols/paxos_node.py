@@ -38,7 +38,9 @@ class PaxosNode(Node):
         self.store.setdefault('commits', 0)
         
         self.is_leader = False
-        self.current_leader = None
+        # Start assuming the node w the highest ID is the leader
+        # TODO: imlement leader election at initialization of the system
+        self.current_leader = len(self.all_nodes) - 1 
         # self.ballot = 0
         self.ballot = self.id  # Start ballot with node ID to avoid conflicts
         
