@@ -234,11 +234,8 @@ def main():
     
     for proto in protocols:
         print(f"\n--- Testing Protocol: {proto.upper()} ---")
-        
-    
         cfg = Config(num_nodes=5, algorithm=proto)
         runner.run_experiment(cfg)
-        
    
         print(f"--- Crash Test: {proto.upper()} ---")
         cfg_fail = Config(num_nodes=5, algorithm=proto)

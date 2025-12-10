@@ -53,18 +53,18 @@ class PaxosNode(Node):
         self.election_timeout = 200.0 + random.uniform(0, 100)
         self.reset_election_timer()
 
-        # TODO: REMOVE
+        # Uncomment to clear command file on start
         # self.clear_file_commands()
 
 
-    # TODO: REMOVE
+    # Auxiliary testing method
     def execute_command(self, command):
         # write the command to a new line of a file (named after the node id)
         filename = f"paxos_node_{self.id}_commands.txt"
         with open(filename, "a") as f:
             f.write(f"{command}\n")
 
-    # TODO: REMOVE
+    # Auxiliary testing method
     def clear_file_commands(self):
         filename = f"paxos_node_{self.id}_commands.txt"
         with open(filename, "w") as f:
@@ -172,7 +172,7 @@ class PaxosNode(Node):
 
             committed_val = msg.value
 
-            # TODO: REMOVE
+            # Uncomment to test command execution
             # self.execute_command(committed_val[2])
 
             if committed_val in self.potential_commands:
