@@ -53,24 +53,22 @@ class BenchmarkRunner:
         self.results: List[BenchmarkResult] = []
         self.logger = Logger()
     
-    def run_experiment(self, config: Config, inject_failure: bool = False) -> Optional[BenchmarkResult]:
+    def run_experiment(self, config: Config, algorithm:str, inject_failure: bool = False) -> Optional[BenchmarkResult]:
         """Run a single experiment with the given config"""
         try:
-            print(f"\n🔬 Running: {config.algorithm} | "
-                  f"Nodes={config.num_nodes} | "
-                  f"Loss={config.packet_loss_rate*100:.1f}% | "
-                  f"Failure={'YES' if inject_failure else 'NO'}")
-            
+            print(f"\n🔬 Running: {algorithm} | Nodes={config.num_nodes} | "
+            f"Loss={config.packet_loss_rate*100:.1f}% | Failure={'YES' if inject_failure else 'NO'}")
+
             # Setup simulator
             sim = Simulator()
             sim.config = config
             net = Network(sim, config)
             
             # Get algorithm
-            algo_case = ALGORITHM_REGISTRY.get(config.algorithm)
+            algo_case = ALGORITHM_REGISTRY.get(algorithm)
             if not algo_case:
-                print(f"❌ Unknown algorithm: {config.algorithm}")
-                return None
+               print(f"Unknown algorithm: {algorithm}")
+               return None
             
             # Create nodes
             node_ids = list(range(config.num_nodes))
@@ -78,12 +76,12 @@ class BenchmarkRunner:
             for nid in node_ids:
                 node = algo_case.create_node(nid, sim, net, node_ids)
                 # Helper: Set initial roles if needed (mostly for PB, Paxos handles itself)
-                if config.algorithm == 'primary_backup':
-                    if nid == max(node_ids):
-                        node.role = 'PRIMARY'
-                    else:
-                        node.role = 'BACKUP'
-                
+                if algorithm == 'primary_backup':
+                   if nid == max(node_ids):
+                      node.role = 'PRIMARY'
+                   else:
+                      node.role = 'BACKUP'
+     
                 sim.register_node(nid, node)
                 nodes[nid] = node
             
@@ -122,7 +120,7 @@ class BenchmarkRunner:
                 sim.run(until_time=max_time)
             
             # Collect metrics
-            result = self._collect_metrics(config, sim, clients, nodes)
+            result = self._collect_metrics(config, sim, algorithm, clients, nodes)
             
             self.results.append(result)
             self._print_result_summary(result)
@@ -134,7 +132,7 @@ class BenchmarkRunner:
             traceback.print_exc()
             return None
     
-    def _collect_metrics(self, config: Config, sim: Simulator, clients: List[Client], nodes: Dict) -> BenchmarkResult:
+    def _collect_metrics(self, config: Config, sim: Simulator, algorithm:str, clients: List[Client], nodes: Dict) -> BenchmarkResult:
         
         # 1. Throughput Calculation
         # Count total messages sent by all nodes (including crashed ones if tracked)
@@ -174,7 +172,7 @@ class BenchmarkRunner:
         mem_values = [getattr(node, 'memory_usage', 0) for node in nodes.values()]
         
         return BenchmarkResult(
-            protocol=config.algorithm,
+            protocol=algorithm,
             num_nodes=config.num_nodes,
             network_delay=config.base_network_delay,
             packet_loss=config.packet_loss_rate,
@@ -218,7 +216,12 @@ class BenchmarkRunner:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for result in self.results:
-                writer.writerow(asdict(result))
+                row = asdict(result)
+                # Round all float values to 2 decimal places for CSV output
+                for k, v in list(row.items()):
+                    if isinstance(v, float):
+                        row[k] = round(v, 2)
+                writer.writerow(row)
         
         print(f"\n📊 CSV exported to: {filepath}")
 
@@ -230,22 +233,25 @@ def main():
     
     runner = BenchmarkRunner()
  
-    protocols = ['paxos', 'primary_backup']
-    
-    for proto in protocols:
-        print(f"\n--- Testing Protocol: {proto.upper()} ---")
+    base_config = Config()  
+
+    for proto in base_config.algorithm:        #
         
-    
-        cfg = Config(num_nodes=5, algorithm=proto)
-        runner.run_experiment(cfg)
         
-   
-        print(f"--- Crash Test: {proto.upper()} ---")
-        cfg_fail = Config(num_nodes=5, algorithm=proto)
-        runner.run_experiment(cfg_fail, inject_failure=True)
+        cfg = Config(num_nodes=base_config.num_nodes,
+                     algorithm=base_config.algorithm)
+        
+        runner.run_experiment(cfg, algorithm=proto)
+ 
+
+        cfg_fail = Config(num_nodes=base_config.num_nodes,
+                          algorithm=base_config.algorithm)
+        
+        runner.run_experiment(cfg_fail, algorithm=proto, inject_failure=True)
 
     runner.export_csv()
     print("\n✅ All benchmarks completed.")
+
 
 if __name__ == "__main__":
     main()

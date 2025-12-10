@@ -1,10 +1,11 @@
 # config.py
-from dataclasses import dataclass
+from dataclasses import dataclass,field
 
 @dataclass
 class Config:
     num_nodes: int = 5
-    algorithm: str = "primary_backup"  
+    algorithm: list[str] = field(default_factory=lambda: ["paxos"])    
+    
     
     # Network
     base_network_delay: float = 1.0
