@@ -7,7 +7,7 @@ from Node import Node
 
 class PaxosNode(Node):
     
-    # --- Message Definitions ---
+    # Message objects that we send between Paxos nodes
     class PrepareMsg:
         def __init__(self, ballot):
             self.type = "PREPARE"; self.ballot = ballot
@@ -32,37 +32,36 @@ class PaxosNode(Node):
         self.all_nodes = all_nodes or []
         self.quorum_size = len(self.all_nodes) // 2 + 1
         
-        # State
-        self.store.setdefault('promised_ballot', 0) # highest-numbered prepare req to which it has responded 
-        self.store.setdefault('accepted_prop', None) # highest-numbered proposal it has ever accepted
+        # Local Paxos state that this node keeps in memory
+        self.store.setdefault('promised_ballot', 0)  # largest prepare ballot where we already gave a promise
+        self.store.setdefault('accepted_prop', None)  # last proposal that this node accepted
         self.store.setdefault('commits', 0)
         
         self.is_leader = False
         self.current_leader = None
         # self.ballot = 0
-        self.ballot = self.id  # Start ballot with node ID to avoid conflicts
+        self.ballot = self.id  # we start ballots from our node id to avoid simple clashes
         
         self.potential_commands = [] 
         self.promises_received = {}
         self.learn_received = {}
         
-        # Timers
+        # Timing configuration for election and heartbeat logic
         self.heartbeat_interval = 50.0
         self.election_timeout = 200.0 + random.uniform(0, 100)
         self.reset_election_timer()
 
-        # TODO: REMOVE
         # self.clear_file_commands()
 
 
-    # TODO: REMOVE
+    # Write one committed command as a new line in a text file for this node
     def execute_command(self, command):
         # write the command to a new line of a file (named after the node id)
         filename = f"paxos_node_{self.id}_commands.txt"
         with open(filename, "a") as f:
             f.write(f"{command}\n")
 
-    # TODO: REMOVE
+    # Remove old commands from the file of this node so we start with a clean log
     def clear_file_commands(self):
         filename = f"paxos_node_{self.id}_commands.txt"
         with open(filename, "w") as f:
@@ -79,24 +78,24 @@ class PaxosNode(Node):
         
         # msg = self.PrepareMsg(self.ballot)
         # for n in self.all_nodes:
-        #     # DUZELTME: self.net.send yerine self.send kullan
+        #     we should use self.send in this simulator
         #     self.send(n, msg)
         # self.reset_election_timer()
 
     def broadcast_prepare(self):
-        """Helper to broadcast Prepare messages."""
+        """Send a PREPARE message with the current ballot to all nodes."""
         msg = self.PrepareMsg(self.ballot)
         for n in self.all_nodes:
-            # DUZELTME: self.send kullan
+            # we send prepare to every node through the simulator API
             self.send(n, msg)
-        # increment ballot for next prepare
+        # after one round, we jump the ballot by the cluster size
         self.ballot += len(self.all_nodes)
 
     def broadcast_accept(self, value):
-        """Helper to broadcast Accept messages."""
+        """Send an ACCEPT message with the chosen value to all nodes."""
         msg = self.AcceptMsg(self.ballot, value)
         for n in self.all_nodes:
-            # DUZELTME: self.send kullan
+            # we send accept so every node can try to accept this value
             self.send(n, msg)
 
     def on_message(self, src: int, msg: Any):
@@ -107,7 +106,7 @@ class PaxosNode(Node):
         else:
             mtype = getattr(msg, 'type', None)
 
-        # 1. HEARTBEAT
+        # React to HEARTBEAT messages from the current leader
         if mtype == "HEARTBEAT":
             if msg.ballot >= self.store['promised_ballot']:
                 self.store['promised_ballot'] = msg.ballot
@@ -116,28 +115,30 @@ class PaxosNode(Node):
                 if self.is_leader and msg.leader_id != self.id:
                     self.is_leader = False
 
-        # 2. PREPARE
+        # Handle PREPARE messages when we are in the acceptor role
         elif mtype == "PREPARE":
             if msg.ballot > self.store['promised_ballot']:
                 self.store['promised_ballot'] = msg.ballot
                 self.current_leader = src
                 self.reset_election_timer()
                 reply = self.PromiseMsg(self.id, msg.ballot, self.store['accepted_prop'])
-                # DUZELTME
+                # send back a PROMISE to the node that started this prepare
                 self.send(src, reply)
             else:
-                # DUZELTME
+                # reply with NACK and tell the proposer about our higher ballot
                 self.send(src, self.NackMsg(self.store['promised_ballot']))
 
-        # 3. PROMISE (Leader Logic)
+        # Handle PROMISE messages when we are the leader
         elif mtype == "PROMISE":
             if not self.is_leader: return
             if msg.ballot not in self.promises_received: self.promises_received[msg.ballot] = []
             self.promises_received[msg.ballot].append(msg)
             
+            # we continue only when we see a full quorum of promises
             if len(self.promises_received[msg.ballot]) != self.quorum_size:
                 return
 
+            # choose the value to propose; if we have nothing, we send a noop
             if self.potential_commands:
                 val = self.potential_commands[0]
             else:
@@ -146,7 +147,7 @@ class PaxosNode(Node):
             self.broadcast_accept(val)
             self.set_timer(self.heartbeat_interval, "heartbeat_timer")
 
-        # 4. ACCEPT (Acceptor Logic)
+        # Handle ACCEPT messages as an acceptor node
         elif mtype == "ACCEPT":
             if msg.ballot >= self.store['promised_ballot']:
                 self.store['promised_ballot'] = msg.ballot
@@ -156,21 +157,22 @@ class PaxosNode(Node):
                 
                 reply = self.LearnMsg(self.id, msg.ballot, msg.value)
                 for n in self.all_nodes:
-                    # DUZELTME
+                    # send LEARN so all nodes can see that we accepted this value
                     self.send(n, reply)
 
-        # 5. LEARN (Learner logic)
+        # Handle LEARN messages when nodes count accepted values
         elif mtype == "LEARN":
             prop = (msg.ballot, msg.value)
             if prop not in self.learn_received: self.learn_received[prop] = set()
             self.learn_received[prop].add(msg.id)
 
+            # we wait until enough acceptors report the same value
             if len(self.learn_received[prop]) != self.quorum_size:
                 return
 
             committed_val = msg.value
 
-            # TODO: REMOVE
+            # we could log this command to a file if we want external trace
             # self.execute_command(committed_val[2])
 
             if committed_val in self.potential_commands:
@@ -186,17 +188,17 @@ class PaxosNode(Node):
                     }
                     self.send(client_id, reply)
 
-        # 6. CLIENT REQUEST
+        # Handle client REQUEST messages, either as leader or follower
         elif mtype == "REQUEST":
             if self.is_leader:
                 cmd_tuple = (msg["client_id"], msg["request_id"], msg["data"])
                 if cmd_tuple not in self.potential_commands:
                     self.potential_commands.append(cmd_tuple)
-                    # self.broadcast_accept(cmd_tuple)
+                    # we start a new prepare round for this command
                     self.broadcast_prepare()
                     
             elif self.current_leader is not None:
-                # DUZELTME: Lidere yönlendir
+                # if we are not leader, we just forward the request to the leader
                 self.send(self.current_leader, msg)
 
     def on_timer(self, timer_id):
@@ -206,7 +208,5 @@ class PaxosNode(Node):
         elif timer_id == "heartbeat_timer" and self.is_leader:
             msg = self.HeartbeatMsg(self.id, self.ballot)
             for n in self.all_nodes:
-                if n != self.id: 
-                    # DUZELTME
                     self.send(n, msg)
             self.set_timer(self.heartbeat_interval, "heartbeat_timer")
