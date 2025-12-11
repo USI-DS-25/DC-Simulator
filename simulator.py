@@ -1,4 +1,3 @@
-# simulator.py
 """
 Core simulation engine that manages time, events, and node interactions.
 """

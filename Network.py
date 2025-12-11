@@ -25,14 +25,17 @@ class Network:
         self.sim = sim
         self.config = config
         
-        # Statistics tracking
+        # Keeps a list of messages if detailed tracking is needed
         self.message_history: List[Dict] = []
+        # Total number of packets that were passed to the network
         self.packets_sent = 0
+        # Number of packets that were dropped because of packet loss
         self.packets_dropped = 0
-        self.packets_delayed_sync = 0  # Track how often sync guarantees fail
+        # Number of sync messages that arrived later than the sync bound
+        self.packets_delayed_sync = 0  
         
-        # Queue Model: Tracks when each node's incoming link will be free.
-        # Format: { node_id: timestamp_when_link_is_free }
+        # Simple queue model for each destination node.
+        # Key: node id, Value: time when its incoming link becomes free.
         self.switch_queues: Dict[int, float] = {}
 
     def _sample_delay(self) -> float:
@@ -74,7 +77,7 @@ class Network:
         # max(when it physically arrived, when the previous packet finished)
         start_processing = max(arrival_time, last_free_time)
         
-        # The packet finishes processing after proc_time
+        # Packet leaves the switch after the processing time
         finish_time = start_processing + proc_time
         
         # Update the queue state for this node
@@ -96,7 +99,7 @@ class Network:
         # 1. Packet Loss Check
         if random.random() < self.config.packet_loss_rate:
             self.packets_dropped += 1
-            # Optional: Log the drop if debug logging is needed
+            # Optional logging for debug runs
             if hasattr(self.sim, 'logger') and self.sim.logger:
                 self.sim.logger.log(src, f"Message to {dst} dropped (packet loss)", level="WARN")
             return
@@ -108,14 +111,13 @@ class Network:
         # 3. Apply Switch/Queuing Delay
         final_delivery_time = self._apply_queuing_delay(dst, arrival_at_switch)
         
-        # 4. Schedule the delivery event in the simulator
+        # 4. Add the delivery event to the simulator
         self.sim.schedule(final_delivery_time, "MESSAGE", dst, {
             "src": src,
             "msg": msg
         })
         
-        # Optional: Store history for debugging/visualization
-        # self.message_history.append({ ... })
+
 
     def sync_send(self, src: int, dst: int, msg: Any, timeout: Optional[float] = None) -> bool:
         """
@@ -132,13 +134,13 @@ class Network:
         """
         self.packets_sent += 1
         
-        # Retrieve sync config
+        # Read sync-related parameters from the config
         p_violate = getattr(self.config, 'p_sync_violate', 0.0)
         base_sync_delay = getattr(self.config, 'sync_delay', 0.5)
         
         actual_network_delay = base_sync_delay
         
-        # 1. Synchrony Violation Check
+        # 1. Check if synchrony guarantee should be violated
         # If violated, the network is "slow" and exceeds the guarantee
         if random.random() < p_violate:
             self.packets_delayed_sync += 1
@@ -148,7 +150,7 @@ class Network:
             if hasattr(self.sim, 'logger') and self.sim.logger:
                 self.sim.logger.log(src, f"SYNC VIOLATION to {dst}! Delay: {actual_network_delay:.2f}ms", level="WARN")
         else:
-            # Normal behavior: Message arrives within expected bound (with tiny jitter)
+            # Normal sync case with small random variation)
             actual_network_delay = base_sync_delay * random.uniform(0.9, 1.0)
 
         # 2. Apply Queuing Logic
@@ -162,7 +164,7 @@ class Network:
         if timeout is not None and (final_delivery_time - self.sim.time) > timeout:
             pass # The protocol code (Node.py) will check the time and handle the timeout.
 
-        # 4. Schedule Delivery
+        # 4. Schedule the message delivery
         self.sim.schedule(final_delivery_time, "MESSAGE", dst, {
             "src": src,
             "msg": msg
