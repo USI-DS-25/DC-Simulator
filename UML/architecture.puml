@@ -1,250 +1,264 @@
 @startuml DBsim_DC_Simulator_UML_Architecture
 
+!define CORE_COLOR #E1F5FF
+!define NETWORK_COLOR #FFF3E0
+!define PROTOCOL_COLOR #F3E5F5
+!define EVAL_COLOR #E8F5E9
+
 skinparam classAttributeIconSize 0
 skinparam backgroundColor #FEFEFE
-
-' ============ CORE SIMULATION ENGINE ============
-
-class Event {
-  - time: float
-  - seq: int
-  - kind: str
-  - node_id: int
-  - data: Dict
+skinparam class {
+  BackgroundColor<<core>> CORE_COLOR
+  BackgroundColor<<network>> NETWORK_COLOR
+  BackgroundColor<<protocol>> PROTOCOL_COLOR
+  BackgroundColor<<eval>> EVAL_COLOR
 }
 
-class Simulator {
-  - time: float
-  - _queue: List[Event]
-  - _next_seq: int
-  - nodes: Dict[int, Node]
-  - logger: Logger
-  - config: Config
-  - metrics: Any
-  --
-  + register_node(node_id, node)
-  + schedule(time, kind, node_id, data)
-  + run(until_time)
-  - _dispatch(event)
-  - log(node_id, message)
+package "Evaluation Layer" <<eval>> {
+  class BenchmarkRunner {
+    - output_dir: Path
+    - results: List[BenchmarkResult]
+    - logger: Logger
+    --
+    + run_experiment(config, algorithm): BenchmarkResult
+    - _collect_metrics(): BenchmarkResult
+    - _percentile(data, percentile): float
+    - _print_result_summary(result)
+    + export_csv(filename)
+  }
+
+  class BenchmarkResult {
+    - protocol: str
+    - num_nodes: int
+    - network_delay: float
+    - packet_loss: float
+    - num_requests: int
+    - duration: float
+    - total_messages: int
+    - throughput_mps: float
+    - throughput_tps: float
+    - latency_min: float
+    - latency_max: float
+    - latency_avg: float
+    - latency_median: float
+    - latency_p95: float
+    - latency_p99: float
+    - commits: int
+    - avg_cpu: float
+    - avg_memory: float
+    - timestamp: str
+  }
+
+  class benchmark {
+    + main()
+  }
+
+  class AlgorithmCase {
+    - name: str
+    - node_class: Type[Node]
+    - default_params: Dict
+    --
+    + create_node(node_id, sim, net, all_nodes): Node
+  }
+
+  class algorithms {
+    {static} ALGORITHM_REGISTRY: Dict[str, AlgorithmCase]
+  }
+
+  benchmark --> BenchmarkRunner : uses
+  BenchmarkRunner *-- BenchmarkResult : creates
+  algorithms o-- AlgorithmCase : contains
 }
 
-' ============ NETWORK LAYER ============
+package "Nodes & Protocols" <<protocol>> {
+  abstract class Node {
+    - id: int
+    - sim: Simulator
+    - net: Network
+    - logger: Logger
+    - store: Dict[str, Any]
+    - messages_received: int
+    - messages_sent: int
+    - last_checked_msgs: int
+    - is_critical: bool
+    - faults: List[str]
+    - cpu_usage: float
+    - memory_usage: float
+    - disk_usage: float
+    - power_watts: float
+    --
+    + {abstract} on_message(src, msg)
+    + {abstract} on_timer(timer_id)
+    + send(dst, msg)
+    + sync_send(dst, msg, timeout): bool
+    + set_timer(delay, timer_id)
+    + update_metrics()
+  }
 
-class Network {
-  - sim: Simulator
-  - config: Config
-  - message_history: List
-  - packets_sent: int
-  - packets_dropped: int
-  - packets_delayed_sync: int
-  - switch_queues: Dict[int, float]
-  --
-  - _sample_delay()
-  - _apply_queuing_delay(dst, arrival_time)
-  + send(src, dst, msg)
-  + sync_send(src, dst, msg, timeout)
-  + get_stats()
+  class SimpleTestNode {
+    - all_nodes: List[int]
+    - state: str
+    --
+    + on_message(src, msg)
+    + on_timer(timer_id)
+    + send_test_message(dest, msg)
+    + get_state(): Dict
+  }
+
+  class PaxosNode {
+    - all_nodes: List[int]
+    - quorum_size: int
+    - is_leader: bool
+    - current_leader: int
+    - ballot: int
+    - potential_commands: List
+    - promises_received: Dict[int, List]
+    - learn_received: Dict[Tuple, Set]
+    - heartbeat_interval: float
+    - election_timeout: float
+    --
+    - PrepareMsg
+    - PromiseMsg
+    - AcceptMsg
+    - LearnMsg
+    - HeartbeatMsg
+    - NackMsg
+    --
+    + start_election()
+    + broadcast_prepare()
+    + broadcast_accept(value)
+    + reset_election_timer()
+    + on_message(src, msg)
+    + on_timer(timer_id)
+  }
+
+  class PrimaryBackupNode {
+    - all_nodes: List[int]
+    - data: List[Any]
+    - role: str
+    - current_primary: int
+    - pending_requests: Dict[int, Dict]
+    - heartbeat_interval: float
+    - election_timeout: float
+    --
+    - HeartbeatMsg
+    - RequestMsg
+    - ReplicateMsg
+    - AckMsg
+    --
+    + become_primary()
+    + reset_election_timer()
+    + send_heartbeat()
+    + replicate_to_backups(req_id, data)
+    + commit_and_reply(req_id)
+    + on_message(src, msg)
+    + on_timer(timer_id)
+  }
+
+  class Client {
+    - request_count: int
+    - reply_count: int
+    - latencies: List[float]
+    - pending_requests: Dict[int, float]
+    - primary_id: int
+    --
+    + on_start()
+    - _schedule_next_request()
+    - _send_request()
+    + on_message(src, msg)
+    + on_timer(timer_id)
+    + summary(): Dict
+  }
+
+  Node <|-- SimpleTestNode
+  Node <|-- PaxosNode
+  Node <|-- PrimaryBackupNode
+  Node <|-- Client
 }
 
-' ============ LOGGING ============
+package "Infrastructure" <<network>> {
+  class Network {
+    - sim: Simulator
+    - config: Config
+    - message_history: List
+    - packets_sent: int
+    - packets_dropped: int
+    - packets_delayed_sync: int
+    - switch_queues: Dict[int, float]
+    --
+    - _sample_delay(): float
+    - _apply_queuing_delay(dst, arrival_time): float
+    + send(src, dst, msg)
+    + sync_send(src, dst, msg, timeout): bool
+    + get_stats(): Dict
+  }
 
-class Logger {
-  - logs: List
-  --
-  + log(node_id, message, level)
+  class Config {
+    - num_nodes: int
+    - algorithm: List[str]
+    - base_network_delay: float
+    - network_jitter: float
+    - packet_loss_rate: float
+    - switch_processing_time: float
+    - sync_delay: float
+    - p_sync_violate: float
+    - num_clients: int
+    - num_requests_per_client: int
+    - inter_request_time: float
+    - reset_on_error: bool
+  }
+
+  class Logger {
+    - logs: List
+    --
+    + log(node_id, message, level)
+  }
+
+  Network o-- Logger : uses
+  Network o-- Config : uses
 }
 
-' ============ NODE HIERARCHY ============
+package "Core Engine" <<core>> {
+  class Event {
+    - time: float
+    - seq: int
+    - kind: str
+    - node_id: int
+    - data: Dict
+  }
 
-abstract class Node {
-  - id: int
-  - sim: Simulator
-  - net: Network
-  - logger: Logger
-  - store: Dict
-  - messages_received: int
-  - messages_sent: int
-  - last_checked_msgs: int
-  - is_critical: bool
-  - faults: List[str]
-  - cpu_usage: float
-  - memory_usage: float
-  - disk_usage: float
-  - power_watts: float
-  --
-  + {abstract} on_message(src, msg)
-  + {abstract} on_timer(timer_id)
-  + send(dst, msg)
-  + sync_send(dst, msg, timeout) : bool
-  + set_timer(delay, timer_id)
-  + update_metrics()
+  class Simulator {
+    - time: float
+    - _queue: List[Event]
+    - _next_seq: int
+    - nodes: Dict[int, Node]
+    - logger: Logger
+    - config: Config
+    - metrics: Any
+    --
+    + register_node(node_id, node)
+    + schedule(time, kind, node_id, data)
+    + run(until_time)
+    - _dispatch(event)
+    - log(node_id, message)
+  }
+
+  Simulator *-- Event : manages
+  Simulator *-- Node : owns
+  Simulator o-- Logger : uses
+  Simulator o-- Network : contains
+  Simulator o-- Config : uses
 }
 
-class SimpleTestNode {
-  - all_nodes: List[int]
-  --
-  + on_message(src, msg)
-  + on_timer(timer_id)
-  + send_test_message(dest, msg)
-  + get_state()
-}
+' ============ CROSS-LAYER RELATIONSHIPS ============
 
-class PaxosNode {
-  - all_nodes: List[int]
-  - quorum_size: int
-  - is_leader: bool
-  - current_leader: int
-  - ballot: int
-  - potential_commands: List
-  - promises_received: Dict
-  - accepted_received: Dict
-  - heartbeat_interval: float
-  - election_timeout: float
-  --
-  + start_election()
-  + next_ballot()
-  + broadcast_accept(value)
-  + determine_value(ballot)
-  + execute_command(value)
-  + send_heartbeat()
-  + reset_election_timer()
-  + on_message(src, msg)
-  + on_timer(timer_id)
-}
-
-class PrimaryBackupNode {
-  - all_nodes: List[int]
-  - data: List
-  - role: str
-  - current_primary: int
-  - pending_requests: Dict
-  - heartbeat_interval: float
-  - election_timeout: float
-  --
-  + become_primary()
-  + reset_election_timer()
-  + send_heartbeat()
-  + commit_and_reply(req_id)
-  + on_message(src, msg)
-  + on_timer(timer_id)
-}
-
-class Client {
-  - request_count: int
-  - reply_count: int
-  - latencies: List[float]
-  - pending_requests: Dict[int, float]
-  - primary_id: int
-  --
-  + on_start()
-  - _schedule_next_request()
-  - _send_request()
-  + on_message(src, msg)
-  + on_timer(timer_id)
-  + summary()
-}
-
-Node <|-- SimpleTestNode
-Node <|-- PaxosNode
-Node <|-- PrimaryBackupNode
-Node <|-- Client
-
-' ============ CONFIGURATION ============
-
-class Config {
-  - num_nodes: int 
-  - algorithm: str 
-  - base_network_delay: float
-  - network_jitter: float
-  - packet_loss_rate: float 
-  - switch_processing_time: float
-  - sync_delay: float 
-  - p_sync_violate: float 
-  - num_clients: int 
-  - num_requests_per_client: int 
-  - inter_request_time: float 
-  - reset_on_error: bool 
-}
-
-' ============ ALGORITHM MANAGEMENT ============
-
-class AlgorithmCase {
-  - name: str
-  - node_class: Type[Node]
-  - default_params: Dict[str, Any]
-  --
-  + create_node(node_id, sim, net, all_nodes, **overrides)
-}
-
-class algorithms {
-  {static} ALGORITHM_REGISTRY: Dict[str, AlgorithmCase]
-}
-
-' ============ BENCHMARKING ============
-
-class BenchmarkResult {
-  - protocol: str
-  - num_nodes: int
-  - network_delay: float
-  - packet_loss: float
-  - num_requests: int
-  - duration: float
-  - total_messages: int
-  - throughput_mps: float
-  - throughput_tps: float
-  - latency_min: float
-  - latency_max: float
-  - latency_avg: float
-  - latency_median: float
-  - latency_p95: float
-  - latency_p99: float
-  - commits: int
-  - aborts: int
-  - commit_rate: float
-  - timestamp: str
-}
-
-class BenchmarkRunner {
-  - output_dir: Path
-  - results: List[BenchmarkResult]
-  - logger: Logger
-  --
-  + run_experiment(config)
-  - _collect_metrics(config, sim, clients, nodes)
-  - _percentile(data, percentile)
-  - _print_result_summary(result)
-  + export_csv(filename)
-}
-
-' ============ RELATIONSHIPS ============
-
-Simulator *-- Event : manages
-Simulator *-- Node : owns
-Simulator o-- Logger : uses
-Simulator *-- Network : contains
-
-Network o-- Logger : uses
+BenchmarkRunner --> Simulator : runs
+BenchmarkRunner --> Network : measures
+BenchmarkRunner --> Client : drives
+AlgorithmCase --> Node : creates instances of
 
 Node o-- Network : uses
 Node o-- Logger : uses
-
-AlgorithmCase --> Node : creates instances of
-algorithms o-- AlgorithmCase : contains
-
-BenchmarkRunner *-- BenchmarkResult : creates
-BenchmarkRunner --> Simulator : runs
-BenchmarkRunner --> Config : uses
-BenchmarkRunner o-- Logger : uses
-
-' ============ EXTERNAL INTERACTIONS ============
-
-class benchmark {
-  + main()
-}
-
-benchmark --> BenchmarkRunner : uses
-benchmark --> Config : loads
-benchmark --> algorithms : references
+Logger o-- Simulator : logs to
 
 @enduml
