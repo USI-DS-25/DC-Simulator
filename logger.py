@@ -1,8 +1,3 @@
-# logger.py
-"""
-Logger for simulation events.
-"""
-
 import time
 from typing import Optional
 

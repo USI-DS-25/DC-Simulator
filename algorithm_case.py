@@ -1,5 +1,3 @@
-# algorithm_case.py
-
 from typing import Type, Dict, Any
 from Node import Node
 

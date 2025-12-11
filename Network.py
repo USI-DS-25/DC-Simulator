@@ -1,4 +1,3 @@
-# Network.py
 """
 Network simulation layer.
 Handles message delivery, latency simulation, packet loss, jitter,

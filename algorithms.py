@@ -1,5 +1,3 @@
-# algorithms.py
-
 from typing import Dict
 from algorithm_case import AlgorithmCase
 from protocols.simple_test import SimpleTestNode

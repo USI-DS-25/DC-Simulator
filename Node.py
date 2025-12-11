@@ -1,7 +1,3 @@
-# Node.py
-"""
-Base node class with realistic metrics.
-"""
 from typing import Any, Optional, Dict, List, TYPE_CHECKING
 from Network import Network
 from abc import ABC, abstractmethod
